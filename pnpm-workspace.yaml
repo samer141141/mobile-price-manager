@@ -1,0 +1,3 @@
+# core-js's optional postinstall prints funding information; no generated assets needed.
+allowBuilds:
+  core-js: false
