@@ -1,0 +1,23 @@
+'use client'
+import {useEffect,useMemo,useState} from 'react'
+import {supabase} from '../lib/supabase'
+const blank={model:'',storage_gb:'128',color:'',battery_health:'',condition:'Good',purchase_price:'',repair_cost:'',other_cost:'',selling_price:'',status:'In Stock',purchase_source:'',notes:''}
+const money=n=>new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0}).format(Number(n||0))
+export default function Home(){
+ const [phones,setPhones]=useState([]),[form,setForm]=useState(blank),[loading,setLoading]=useState(true),[msg,setMsg]=useState('')
+ async function load(){setLoading(true);const {data,error}=await supabase.from('phones').select('*').order('created_at',{ascending:false});if(error)setMsg(error.message);else setPhones(data||[]);setLoading(false)}
+ useEffect(()=>{load()},[])
+ async function add(e){e.preventDefault();setMsg('');const payload={...form,storage_gb:+form.storage_gb,battery_health:form.battery_health?+form.battery_health:null,purchase_price:+(form.purchase_price||0),repair_cost:+(form.repair_cost||0),other_cost:+(form.other_cost||0),selling_price:+(form.selling_price||0)};const {error}=await supabase.from('phones').insert(payload);if(error)setMsg(error.message);else{setForm(blank);setMsg('Phone added successfully.');load()}}
+ async function sold(id){const {error}=await supabase.from('phones').update({status:'Sold'}).eq('id',id);if(error)setMsg(error.message);else load()}
+ const stats=useMemo(()=>{let cost=0,potential=0,sold=0;phones.forEach(p=>{const c=+p.purchase_price + +p.repair_cost + +p.other_cost;cost+=p.status==='Sold'?0:c;potential+=p.status==='Sold'?0:+p.selling_price-c;if(p.status==='Sold')sold++});return {count:phones.length,cost,potential,sold}},[phones])
+ return <main><header><div><h1>Mobile Price Manager</h1><p>Inventory, pricing and profit dashboard</p></div><button onClick={load}>Refresh</button></header>
+ <section className="cards"><Card t="Total Phones" v={stats.count}/><Card t="Inventory Value" v={money(stats.cost)}/><Card t="Potential Profit" v={money(stats.potential)}/><Card t="Sold" v={stats.sold}/></section>
+ <section className="panel"><h2>Add Phone</h2><form onSubmit={add} className="grid">
+ {['model','color','battery_health','purchase_price','repair_cost','other_cost','selling_price','purchase_source'].map(k=><label key={k}><span>{k.replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</span><input required={k==='model'} type={['battery_health','purchase_price','repair_cost','other_cost','selling_price'].includes(k)?'number':'text'} value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})}/></label>)}
+ <label><span>Storage</span><select value={form.storage_gb} onChange={e=>setForm({...form,storage_gb:e.target.value})}>{[64,128,256,512,1024].map(x=><option key={x}>{x}</option>)}</select></label>
+ <label><span>Condition</span><select value={form.condition} onChange={e=>setForm({...form,condition:e.target.value})}>{['Excellent','Good','Fair','Damaged'].map(x=><option key={x}>{x}</option>)}</select></label>
+ <label><span>Status</span><select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>{['In Stock','Repairing','Listed','Sold'].map(x=><option key={x}>{x}</option>)}</select></label>
+ <label className="wide"><span>Notes</span><input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label><button className="primary">Add to Inventory</button></form>{msg&&<p className="msg">{msg}</p>}</section>
+ <section className="panel"><div className="title"><h2>Inventory</h2><span>{loading?'Loading…':`${phones.length} phones`}</span></div><div className="table"><table><thead><tr><th>Phone</th><th>Battery</th><th>Status</th><th>Total Cost</th><th>Sell Price</th><th>Profit</th><th></th></tr></thead><tbody>{phones.map(p=>{const cost=+p.purchase_price + +p.repair_cost + +p.other_cost;return <tr key={p.id}><td><b>{p.model}</b><small>{p.storage_gb} GB · {p.color||'—'} · {p.condition||'—'}</small></td><td>{p.battery_health?`${p.battery_health}%`:'—'}</td><td><span className="badge">{p.status}</span></td><td>{money(cost)}</td><td>{money(p.selling_price)}</td><td className={(+p.selling_price-cost)>=0?'profit':'loss'}>{money(+p.selling_price-cost)}</td><td>{p.status!=='Sold'&&<button onClick={()=>sold(p.id)}>Mark Sold</button>}</td></tr>})}{!loading&&!phones.length&&<tr><td colSpan="7" className="empty">No phones yet. Add your first phone above.</td></tr>}</tbody></table></div></section>
+ <footer>Mobile Price Manager · SEK</footer></main>}
+function Card({t,v}){return <div className="card"><span>{t}</span><strong>{v}</strong></div>}
