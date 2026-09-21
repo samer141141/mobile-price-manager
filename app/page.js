@@ -1,9 +1,22 @@
 'use client'
 import {useEffect,useMemo,useState} from 'react'
+import { useRouter } from 'next/navigation'
 import {supabase} from '../lib/supabase'
 const blank={model:'',storage_gb:'128',color:'',battery_health:'',condition:'Good',purchase_price:'',repair_cost:'',other_cost:'',selling_price:'',status:'In Stock',purchase_source:'',notes:''}
 const money=n=>new Intl.NumberFormat('sv-SE',{style:'currency',currency:'SEK',maximumFractionDigits:0}).format(Number(n||0))
-export default function Home(){
+export default function Home(){const router = useRouter()
+
+useEffect(() => {
+  async function checkUser() {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      router.replace('/login')
+    }
+  }
+
+  checkUser()
+}, [router])
  const [phones,setPhones]=useState([]),[form,setForm]=useState(blank),[loading,setLoading]=useState(true),[msg,setMsg]=useState('')
  async function load(){setLoading(true);const {data,error}=await supabase.from('phones').select('*').order('created_at',{ascending:false});if(error)setMsg(error.message);else setPhones(data||[]);setLoading(false)}
  useEffect(()=>{load()},[])
