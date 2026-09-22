@@ -2,10 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
-const migration = await readFile(
-  new URL("../migrations/20260921_lager_iphone.sql", import.meta.url),
-  "utf8",
-);
+const migration = (
+  await Promise.all(
+    ["20260921_lager_iphone.sql", "20260922_inventory_scope_history.sql"].map(
+      (name) =>
+        readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
+    ),
+  )
+).join("\n");
 const admin = "00000000-0000-4000-8000-000000000001",
   employee = "00000000-0000-4000-8000-000000000002",
   outsider = "00000000-0000-4000-8000-000000000003";
@@ -37,10 +41,8 @@ test("migration preserves legacy rows, is repeatable, and enforces database perm
     await db.exec(migration);
     await db.exec(migration);
     const after = (await db.query("select * from phones")).rows[0];
-    assert.deepEqual(
-      { ...after, imei: undefined },
-      { ...before, imei: undefined },
-    );
+    for (const key of Object.keys(before))
+      assert.deepEqual(after[key], before[key]);
     assert.equal(
       (await db.query("select count(*)::int n from market_prices")).rows[0].n,
       1,
@@ -82,8 +84,9 @@ test("migration preserves legacy rows, is repeatable, and enforces database perm
     assert.equal(full.phones.find((p) => p.id === 1).purchase_price, 100);
     assert.equal(full.phones.find((p) => p.id === 2).imei, "001234567890123");
     await db.query(
-      'select lager_save_phone(\'2\',\'{"status":"Sold","purchase_price":400,"selling_price":700}\'::jsonb)',
+      "select lager_save_phone('2','{\"purchase_price\":400,\"selling_price\":700}'::jsonb)",
     );
+    await db.query("select lager_transition_phone('2','Sold')");
     await db.query(
       'select lager_add_market(\'{"model":"New phone","storage_gb":256,"condition":"Good","source":"Blocket","market_price":900,"listing_url":"https://example.com/item"}\'::jsonb)',
     );
@@ -100,6 +103,29 @@ test("migration preserves legacy rows, is repeatable, and enforces database perm
     full = (await db.query("select lager_dashboard() d")).rows[0].d;
     assert.equal(full.phones.find((p) => p.id === 2).status, "Sold");
     assert.equal(full.phones.find((p) => p.id === 2).purchase_price, 400);
+    assert.equal(
+      full.phones.find((p) => p.id === 1).inventory_scope,
+      "business",
+    );
+    await identity(db, admin);
+    await db.query("select lager_transition_phone('2','In Stock')");
+    await db.exec("reset role");
+    let returned = (
+      await db.query("select * from lager_sale_history where phone_id='2'")
+    ).rows[0];
+    assert.ok(returned.returned_at);
+    await identity(db, admin);
+    await db.query("select lager_transition_phone('2','Sold')");
+    await db.exec("reset role");
+    assert.equal(
+      (
+        await db.query(
+          "select count(*)::int n from lager_sale_history where phone_id='2'",
+        )
+      ).rows[0].n,
+      2,
+    );
+    await identity(db, employee);
     await db.query("select lager_delete_phone('2')");
     await identity(db, outsider);
     await assert.rejects(db.query("select lager_dashboard()"), /assignment/);

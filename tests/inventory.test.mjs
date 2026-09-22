@@ -38,6 +38,7 @@ test("search matches all requested fields and combined terms", () => {
     storage_gb: 256,
     color: "Blue",
     condition: "Good",
+    grade: "B",
     status: "Listed",
   };
   for (const q of [
@@ -46,6 +47,7 @@ test("search matches all requested fields and combined terms", () => {
     "256",
     "blue",
     "good",
+    "b",
     "listed",
     "IPHONE 256 blue",
   ])

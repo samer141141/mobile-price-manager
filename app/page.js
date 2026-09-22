@@ -32,7 +32,15 @@ export default function Home() {
     [notice, setNotice] = useState(""),
     [tab, setTab] = useState("available"),
     [search, setSearch] = useState(""),
+    [filters, setFilters] = useState({
+      model: "",
+      storage: "",
+      grade: "",
+      condition: "",
+      status: "",
+    }),
     [editor, setEditor] = useState(null),
+    [details, setDetails] = useState(null),
     [deleting, setDeleting] = useState(null),
     [exporting, setExporting] = useState(false),
     [selected, setSelected] = useState(
@@ -115,10 +123,31 @@ export default function Home() {
       setBusy(false);
     }
   }
-  const available = phones.filter((p) => !isSold(p)),
-    sold = phones.filter(isSold),
-    filtered = phones.filter(
-      (p) => (tab === "sold" ? isSold(p) : !isSold(p)) && matches(p, search),
+  const business = phones.filter(
+      (p) => (p.inventory_scope || "business") === "business",
+    ),
+    samer = phones.filter((p) => p.inventory_scope === "samer"),
+    available = business.filter((p) => !isSold(p)),
+    sold = business.filter(isSold),
+    visiblePhones = tab === "samer" ? samer : tab === "sold" ? sold : available,
+    filtered = visiblePhones.filter(
+      (p) =>
+        matches(p, search) &&
+        (!filters.model || p.model === filters.model) &&
+        (!filters.storage || String(p.storage_gb) === filters.storage) &&
+        (!filters.grade || String(p.grade || "") === filters.grade) &&
+        (!filters.condition || p.condition === filters.condition) &&
+        (!filters.status || p.status === filters.status),
+    ),
+    saleHistory = data?.sale_history || [],
+    activeSales = saleHistory.filter((s) => !s.returned_at),
+    totalSales = activeSales.reduce(
+      (n, s) => n + Number(s.selling_price || 0),
+      0,
+    ),
+    realizedProfit = activeSales.reduce(
+      (n, s) => n + Number(s.realized_profit || 0),
+      0,
     ),
     stats = marketStats(
       market,
@@ -200,12 +229,27 @@ export default function Home() {
               {financial ? (
                 <>
                   <Card
-                    title="Inventory Value"
+                    title="Total Inventory Cost"
                     value={money(available.reduce((n, p) => n + cost(p), 0))}
                   />
                   <Card
-                    title="Realized Profit"
-                    value={money(sold.reduce((n, p) => n + profit(p), 0))}
+                    title="Total Sales"
+                    value={money(
+                      saleHistory.length
+                        ? totalSales
+                        : sold.reduce(
+                            (n, p) => n + Number(p.selling_price || 0),
+                            0,
+                          ),
+                    )}
+                  />
+                  <Card
+                    title="Total Realized Profit"
+                    value={money(
+                      saleHistory.length
+                        ? realizedProfit
+                        : sold.reduce((n, p) => n + profit(p), 0),
+                    )}
                   />
                 </>
               ) : (
@@ -220,6 +264,7 @@ export default function Home() {
               {[
                 ["available", "Available Phones"],
                 ["sold", "Sold Phones"],
+                ["samer", "Samer"],
                 ["market", "Market Prices"],
                 ...(access.role === "admin"
                   ? [["team", "Team Permissions"]]
@@ -241,12 +286,16 @@ export default function Home() {
                 </button>
               ))}
             </nav>
-            {["available", "sold"].includes(tab) && (
+            {["available", "sold", "samer"].includes(tab) && (
               <section className="panel">
                 <div className="title">
                   <div>
                     <h2>
-                      {tab === "sold" ? "Sold Phones" : "Available Phones"}
+                      {tab === "samer"
+                        ? "Samer"
+                        : tab === "sold"
+                          ? "Sold Phones"
+                          : "Available Phones"}
                     </h2>
                     <p>
                       {filtered.length} phones
@@ -270,7 +319,14 @@ export default function Home() {
                     <button
                       className="primary"
                       onClick={() =>
-                        setEditor({ id: null, form: { ...blank } })
+                        setEditor({
+                          id: null,
+                          form: {
+                            ...blank,
+                            inventory_scope:
+                              tab === "samer" ? "samer" : "business",
+                          },
+                        })
                       }
                     >
                       + Add Phone
@@ -280,68 +336,139 @@ export default function Home() {
                 <Field
                   label="Search inventory"
                   type="search"
-                  placeholder="Model, IMEI, storage, color, condition or status"
+                  placeholder="Model, IMEI, storage, color, grade, condition or status"
                   value={search}
                   onChange={setSearch}
                 />
-                <div className="phone-list">
+                <div className="filter-bar">
+                  {[
+                    [
+                      "model",
+                      "Model",
+                      [
+                        ...new Set(
+                          visiblePhones.map((p) => p.model).filter(Boolean),
+                        ),
+                      ],
+                    ],
+                    [
+                      "storage",
+                      "Storage",
+                      [
+                        ...new Set(
+                          visiblePhones
+                            .map((p) => String(p.storage_gb))
+                            .filter(Boolean),
+                        ),
+                      ],
+                    ],
+                    [
+                      "grade",
+                      "Grade",
+                      [
+                        ...new Set(
+                          visiblePhones.map((p) => p.grade).filter(Boolean),
+                        ),
+                      ],
+                    ],
+                    ["condition", "Condition", conditions],
+                    ["status", "Status", statuses],
+                  ].map(([key, label, options]) => (
+                    <label key={key}>
+                      <span>Filter by {label}</span>
+                      <select
+                        value={filters[key]}
+                        onChange={(e) =>
+                          setFilters({ ...filters, [key]: e.target.value })
+                        }
+                      >
+                        <option value="">All</option>
+                        {options.map((o) => (
+                          <option key={o} value={o}>
+                            {key === "storage" ? `${o} GB` : o}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <div
+                  className={
+                    "inventory-table" + (financial ? " financial" : "")
+                  }
+                >
+                  <div
+                    className="inventory-row inventory-head"
+                    aria-hidden="true"
+                  >
+                    <span>Model</span>
+                    <span>Storage</span>
+                    <span>Color</span>
+                    <span>Grade</span>
+                    <span>Battery</span>
+                    {financial && (
+                      <>
+                        <span>Purchase</span>
+                        <span>Costs</span>
+                        <span>Selling</span>
+                        <span>Profit</span>
+                      </>
+                    )}
+                    <span>Status</span>
+                    <span>Actions</span>
+                  </div>
                   {filtered.map((p) => (
-                    <article className="phone" key={p.id}>
-                      <div className="phone-title">
-                        <div>
-                          <h3>{p.model}</h3>
-                          <p>
-                            {p.storage_gb} GB · {p.color || "No color"} ·{" "}
-                            {p.condition || "No condition"}
-                          </p>
-                        </div>
-                        <span className={"badge " + (isSold(p) ? "sold" : "")}>
-                          {p.status || "In Stock"}
-                        </span>
-                      </div>
-                      <dl>
-                        <Detail label="IMEI" value={p.imei || "Not recorded"} />
-                        <Detail
-                          label="Battery Health"
-                          value={
-                            p.battery_health == null
-                              ? "Not recorded"
-                              : `${p.battery_health}%`
-                          }
-                        />
-                        <Detail
-                          label="Selling Price"
-                          value={money(p.selling_price)}
-                        />
-                        {financial && (
-                          <>
-                            <Detail
-                              label="Purchase Price"
-                              value={money(p.purchase_price)}
-                            />
-                            <Detail
-                              label="Repair / Other Cost"
-                              value={`${money(p.repair_cost)} / ${money(p.other_cost)}`}
-                            />
-                            <Detail label="Profit" value={money(profit(p))} />
-                          </>
-                        )}
-                        <Detail
-                          label="Purchase Source"
-                          value={p.purchase_source || "—"}
-                        />
-                      </dl>
-                      {p.notes && <p className="notes">{p.notes}</p>}
-                      <div className="actions">
+                    <article
+                      className="phone inventory-row"
+                      key={p.id}
+                      onClick={() => setDetails(p)}
+                    >
+                      <strong>{p.model}</strong>
+                      <span>{p.storage_gb} GB</span>
+                      <span>{p.color || "—"}</span>
+                      <span>{p.grade || "—"}</span>
+                      <span>
+                        {p.battery_health == null
+                          ? "—"
+                          : `${p.battery_health}%`}
+                      </span>
+                      {financial && (
+                        <>
+                          <span>{money(p.purchase_price)}</span>
+                          <span>
+                            {money(
+                              Number(p.repair_cost || 0) +
+                                Number(p.other_cost || 0),
+                            )}
+                          </span>
+                          <span>{money(p.selling_price)}</span>
+                          <span>{money(profit(p))}</span>
+                        </>
+                      )}
+                      <span className={"badge " + (isSold(p) ? "sold" : "")}>
+                        {p.status || "In Stock"}
+                      </span>
+                      <div
+                        className="actions"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button onClick={() => setDetails(p)}>View</button>
                         <button
                           disabled={busy}
                           onClick={() =>
                             setEditor({
                               id: p.id,
                               original: p,
-                              form: Object.fromEntries(
-                                Object.keys(blank).map((k) => [k, p[k] ?? ""]),
-                              ),
+                              form: {
+                                ...Object.fromEntries(
+                                  Object.keys(blank).map((k) => [
+                                    k,
+                                    p[k] ?? "",
+                                  ]),
+                                ),
+                                inventory_scope:
+                                  p.inventory_scope || "business",
+                              },
                             })
                           }
                         >
@@ -359,22 +486,44 @@ export default function Home() {
                         >
                           Delete
                         </button>
-                        {!isSold(p) && (
+                        {!isSold(p) ? (
                           <button
                             className="primary"
                             disabled={busy}
                             onClick={() =>
                               act(
                                 () =>
-                                  rpc("lager_save_phone", {
+                                  rpc("lager_transition_phone", {
                                     phone_id: String(p.id),
-                                    payload: { status: "Sold" },
+                                    new_status: "Sold",
                                   }),
-                                "Phone moved to Sold Phones.",
+                                tab === "samer"
+                                  ? "Samer phone marked Sold."
+                                  : "Phone moved to Sold Phones.",
                               )
                             }
                           >
                             Mark Sold
+                          </button>
+                        ) : (
+                          <button
+                            disabled={busy}
+                            onClick={() =>
+                              act(
+                                () =>
+                                  rpc("lager_transition_phone", {
+                                    phone_id: String(p.id),
+                                    new_status: "In Stock",
+                                  }),
+                                tab === "samer"
+                                  ? "Samer phone returned to Available."
+                                  : "Phone returned to stock; sale history preserved.",
+                              )
+                            }
+                          >
+                            {tab === "samer"
+                              ? "Return to Available"
+                              : "Return to Stock / Relist"}
                           </button>
                         )}
                       </div>
@@ -396,6 +545,11 @@ export default function Home() {
                 <p>
                   Compare matching model, storage and condition. These are
                   recorded listing prices, not guaranteed sales.
+                </p>
+                <p className="notice">
+                  <strong>Tradera live collection is disabled.</strong> Manual
+                  Tradera and Blocket asking prices remain available. Auctions
+                  and bids are not imported; no prices or grades are guessed.
                 </p>
                 <form
                   className="grid"
@@ -594,21 +748,29 @@ export default function Home() {
               <section className="panel">
                 <h2>Team Permissions</h2>
                 <p>
-                  Use an existing Supabase Auth user's email. New users need an
-                  assignment before accessing inventory. Admins always have full
-                  access.
+                  Invite a new user or update an existing user by email.
+                  Invitations are sent by the secure server endpoint; Admins
+                  always have full access.
                 </p>
                 <form
                   className="grid"
                   onSubmit={(e) => {
                     e.preventDefault();
                     act(async () => {
-                      await rpc("lager_set_member", {
-                        member_email: member.email,
-                        member_role: member.role,
-                        financial_access: member.can_view_financials,
-                        delete_access: member.can_delete,
+                      const {
+                        data: { session },
+                      } = await supabase.auth.getSession();
+                      const response = await fetch("/api/team/invite", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${session?.access_token || ""}`,
+                        },
+                        body: JSON.stringify(member),
                       });
+                      const result = await response.json();
+                      if (!response.ok)
+                        throw new Error(result.error || "Invitation failed");
                       setMembers(await rpc("lager_members"));
                     }, "Permissions updated.");
                   }}
@@ -654,7 +816,7 @@ export default function Home() {
                     Delete phones
                   </label>
                   <button disabled={busy} className="primary">
-                    Save Permissions
+                    Invite / Save Permissions
                   </button>
                 </form>
                 {members.map((m) => (
@@ -731,16 +893,18 @@ export default function Home() {
                     value={editor.form[k]}
                     required={["model", "storage_gb"].includes(k)}
                     type={
-                      [
-                        "storage_gb",
-                        "battery_health",
-                        "purchase_price",
-                        "repair_cost",
-                        "other_cost",
-                        "selling_price",
-                      ].includes(k)
-                        ? "number"
-                        : "text"
+                      k === "purchase_date"
+                        ? "date"
+                        : [
+                              "storage_gb",
+                              "battery_health",
+                              "purchase_price",
+                              "repair_cost",
+                              "other_cost",
+                              "selling_price",
+                            ].includes(k)
+                          ? "number"
+                          : "text"
                     }
                     min={k === "storage_gb" ? 1 : 0}
                     max={k === "battery_health" ? 100 : undefined}
@@ -790,6 +954,72 @@ export default function Home() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+      {details && (
+        <Modal
+          title={`${details.model} details`}
+          onClose={() => setDetails(null)}
+          error=""
+        >
+          <dl className="detail-grid">
+            <Detail label="Model" value={details.model} />
+            <Detail label="Storage" value={`${details.storage_gb} GB`} />
+            <Detail label="Color" value={details.color || "—"} />
+            <Detail label="Grade" value={details.grade || "—"} />
+            <Detail label="Condition" value={details.condition || "—"} />
+            <Detail
+              label="Battery Health"
+              value={
+                details.battery_health == null
+                  ? "—"
+                  : `${details.battery_health}%`
+              }
+            />
+            <Detail label="IMEI" value={details.imei || "Not recorded"} />
+            <Detail label="Status" value={details.status || "In Stock"} />
+            <Detail
+              label="Purchase Source"
+              value={details.purchase_source || "—"}
+            />
+            <Detail
+              label="Purchase Date"
+              value={details.purchase_date || "—"}
+            />
+            <Detail
+              label="Added"
+              value={
+                details.created_at
+                  ? new Date(details.created_at).toLocaleDateString()
+                  : "—"
+              }
+            />
+            {financial && (
+              <>
+                <Detail
+                  label="Purchase Price"
+                  value={money(details.purchase_price)}
+                />
+                <Detail
+                  label="Repair Cost"
+                  value={money(details.repair_cost)}
+                />
+                <Detail label="Other Cost" value={money(details.other_cost)} />
+                <Detail
+                  label="Selling Price"
+                  value={money(details.selling_price)}
+                />
+                <Detail label="Profit" value={money(profit(details))} />
+              </>
+            )}
+          </dl>
+          {details.notes && (
+            <p className="notes">
+              <strong>Notes</strong>
+              <br />
+              {details.notes}
+            </p>
+          )}
         </Modal>
       )}
       {deleting && (

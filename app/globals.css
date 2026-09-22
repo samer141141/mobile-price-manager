@@ -211,14 +211,64 @@ nav button.active {
   background: #153e35;
   color: white;
 }
-.phone-list {
+.filter-bar {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 22px;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
 }
-.phone {
-  padding: 20px;
+.inventory-table {
+  margin-top: 18px;
+  border: 1px solid #dfe8e3;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.inventory-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.5fr) repeat(
+      4,
+      minmax(64px, 0.7fr)
+    ) minmax(85px, 0.8fr) minmax(245px, 2fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5ece8;
+  font-size: 12px;
+  cursor: pointer;
+}
+.financial .inventory-row {
+  grid-template-columns: minmax(130px, 1.5fr) repeat(
+      4,
+      minmax(64px, 0.7fr)
+    ) repeat(4, minmax(82px, 0.85fr)) minmax(85px, 0.8fr) minmax(245px, 2fr);
+}
+.inventory-row:last-child {
+  border-bottom: 0;
+}
+.inventory-row:hover {
+  background: #f8fbf9;
+}
+.inventory-head {
+  background: #f1f6f3;
+  color: #61756b;
+  font-weight: 700;
+  cursor: default;
+}
+.inventory-row.phone {
+  border-radius: 0;
+  border-width: 0 0 1px;
+}
+.inventory-row .actions {
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+.inventory-row .actions button {
+  min-height: 34px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .phone-title {
   align-items: flex-start;
@@ -392,8 +442,47 @@ footer {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .phone-list {
-    grid-template-columns: 1fr;
+  .filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .inventory-table {
+    border: 0;
+    overflow: visible;
+  }
+  .inventory-head {
+    display: none;
+  }
+  .inventory-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid #dfe8e3 !important;
+    border-radius: 12px !important;
+    margin-bottom: 10px;
+    padding: 14px;
+  }
+  .inventory-row > *::before {
+    display: block;
+    color: #73847c;
+    font-size: 10px;
+  }
+  .inventory-row > strong::before {
+    content: "Model";
+  }
+  .inventory-row > span:nth-child(2)::before {
+    content: "Storage";
+  }
+  .inventory-row > span:nth-child(3)::before {
+    content: "Color";
+  }
+  .inventory-row > span:nth-child(4)::before {
+    content: "Grade";
+  }
+  .inventory-row > span:nth-child(5)::before {
+    content: "Battery";
+  }
+  .inventory-row .actions {
+    grid-column: 1/-1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 @media (max-width: 550px) {
@@ -411,6 +500,12 @@ footer {
   }
   .panel {
     padding: 16px;
+  }
+  .filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .detail-grid {
+    grid-template-columns: 1fr 1fr;
   }
   .card {
     padding: 16px;
