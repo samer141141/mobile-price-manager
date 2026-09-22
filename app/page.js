@@ -631,7 +631,7 @@ export default function Home() {
                     <h3>Buying guide</h3>
                     <div className="grid">
                       <Field
-                        label="Buy price (% of average market price)"
+                        label="Maximum buy price (% of typical market price)"
                         type="number"
                         min="0"
                         max="100"
@@ -659,9 +659,11 @@ export default function Home() {
                       />
                     </div>
                     <p>
-                      Recommended buy price = average × {percentage || 0}%.
-                      Expected profit = average − recommended buy price −
-                      estimated costs. The percentage is saved on this device.
+                      Recommended buy price = typical market price × {percentage || 0}%.
+                      Expected profit = typical market price − recommended buy
+                      price − estimated costs. Unusual listing prices are
+                      filtered automatically. The percentage is saved on this
+                      device.
                     </p>
                   </div>
                 )}
