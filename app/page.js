@@ -15,7 +15,7 @@ import {
   payload,
   editPayload,
 } from "../lib/inventory.mjs";
-const conditions = ["Excellent", "Good", "Fair", "Damaged"],
+const conditions = ["Excellent", "Good", "Fair", "Damaged"],\n  marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
   sources = ["Tradera", "Blocket", "Swappie", "Back Market", "Other"];
 async function rpc(name, args = {}) {
@@ -703,6 +703,14 @@ export default function Home() {
                     value={marketForm.source}
                     onChange={(v) =>
                       setMarketForm({ ...marketForm, source: v })
+                    }
+                  />
+                  <Select
+                    label="Market Type"
+                    options={marketConditions}
+                    value={marketForm.market_condition || "Used"}
+                    onChange={(v) =>
+                      setMarketForm({ ...marketForm, market_condition: v })
                     }
                   />
                   <Field
