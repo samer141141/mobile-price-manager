@@ -16,6 +16,7 @@ const legacy = {
   selling_price: 3500,
   purchase_source: "Shop",
   notes: "Sample phone",
+  inventory_scope: "business",
 };
 async function setup(page, employee = false) {
   let phones = [
@@ -80,6 +81,7 @@ async function setup(page, employee = false) {
             listing_url: "",
           },
         ],
+        sale_history: [],
       };
     else if (name === "lager_save_phone") {
       if (body.phone_id)
@@ -87,7 +89,11 @@ async function setup(page, employee = false) {
           String(p.id) === body.phone_id ? { ...p, ...body.payload } : p,
         );
       else phones.push({ ...body.payload, id: phones.length + 1 });
-    } else if (name === "lager_delete_phone")
+    } else if (name === "lager_transition_phone")
+      phones = phones.map((p) =>
+        String(p.id) === body.phone_id ? { ...p, status: body.new_status } : p,
+      );
+    else if (name === "lager_delete_phone")
       phones = phones.filter((p) => String(p.id) !== body.phone_id);
     else if (name === "lager_members") response = [];
     await route.fulfill({
@@ -107,7 +113,9 @@ test("inventory editing, search, sold separation and confirmed deletion", async 
 }) => {
   const calls = await setup(page);
   await expect(page.locator(".phone")).toHaveCount(1);
-  await expect(page.locator(".phone")).toContainText("001234567890123");
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("001234567890123");
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page.getByLabel("Search inventory").fill("Blue 128");
   await expect(page.locator(".phone")).toHaveCount(1);
   await page.getByLabel("Search inventory").fill("iPhone 14");
@@ -146,7 +154,8 @@ test("inventory editing, search, sold separation and confirmed deletion", async 
   await page
     .getByRole("button", { name: "Available Phones", exact: true })
     .click();
-  await expect(page.locator(".phone")).toContainText("009876543210123");
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("009876543210123");
 });
 test("Excel and PDF exports download selected columns with finances off by default", async ({
   page,
