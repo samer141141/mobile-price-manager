@@ -460,7 +460,7 @@ export default function Home() {
                         {!isSold(p) && (
                           <button
                             className="ad-button"
-                            onClick={async () => {
+                            onClick={() => {
                               const title = [p.model, String(p.storage_gb) + "GB", p.color].filter(Boolean).join(" – ");
                               const lines = [
                                 "📱 " + title,
@@ -475,21 +475,14 @@ export default function Home() {
                                 "📦 Kan skickas med post eller hämtas enligt överenskommelse.",
                                 "",
                                 "📩 Skicka meddelande vid intresse."
-                              ].filter((line) => line !== "");
+                              ].filter(Boolean);
                               const ad = title + "\n\n" + lines.join("\n");
-                              try {
-                                await navigator.clipboard.writeText(ad);
-                                setNotice("Ad copied — ready for Blocket or Facebook.");
-                                setError("");
-                              } catch {
-                                window.prompt("Copy your ad:", ad);
-                              }
+                              window.prompt("Your ad is ready — copy it:", ad);
                             }}
                           >
                             Create Ad
                           </button>
-                        )}
-                        <button
+                        )}                        <button
                           disabled={busy}
                           onClick={() =>
                             setEditor({
