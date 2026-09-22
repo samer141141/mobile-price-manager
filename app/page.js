@@ -581,11 +581,24 @@ export default function Home() {
                             model: marketForm.model.trim(),
                             storage: String(marketForm.storage_gb || ""),
                           });
+                          const sessionResult = await supabase.auth.getSession();
+                          const accessToken = sessionResult.data.session?.access_token;
                           const response = await fetch(
-                            window.location.origin + "/api/market/tradera?" + params.toString(),
-                            { headers: { Accept: "application/json" } },
+                            "/api/market/tradera?" + params.toString(),
+                            {
+                              headers: {
+                                Accept: "application/json",
+                                ...(accessToken ? { Authorization: "Bearer " + accessToken } : {}),
+                              },
+                            },
                           );
-                          const result = await response.json();
+                          const responseText = await response.text();
+                          let result;
+                          try {
+                            result = JSON.parse(responseText);
+                          } catch {
+                            throw new Error("Market service returned an invalid response (" + response.status + ").");
+                          }
                           if (!response.ok) throw new Error(result.error || "Market check failed");
                           setLiveMarket(result);
                         } catch (e) {
