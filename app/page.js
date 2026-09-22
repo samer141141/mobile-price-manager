@@ -584,15 +584,10 @@ export default function Home() {
                           });
                           const sessionResult = await supabase.auth.getSession();
                           const accessToken = sessionResult.data.session?.access_token;
-                          const response = await fetch(
-                            "/api/market/tradera?" + params.toString(),
-                            {
-                              headers: {
-                                Accept: "application/json",
-                                ...(accessToken ? { Authorization: "Bearer " + accessToken } : {}),
-                              },
-                            },
-                          );
+                          const blocketUrl = "https://www.blocket.se/annonser/hela_sverige/elektronik/telefoner_tillbehor/mobiltelefoner?cg=5061&q=" + encodeURIComponent([marketForm.model.trim(), marketForm.storage_gb ? marketForm.storage_gb + "GB" : ""].filter(Boolean).join(" "));
+                          window.open(blocketUrl, "_blank", "noopener,noreferrer");
+                          setCheckingMarket(false);
+                          return;
                           const responseText = await response.text();
                           let result;
                           try {
@@ -610,7 +605,7 @@ export default function Home() {
                         }
                       }}
                     >
-                      {checkingMarket ? "Checking…" : "Check Market Price"}
+                      {checkingMarket ? "Opening…" : "Check Blocket Prices"}
                     </button>
                   </div>
                   {liveMarket && (() => {
