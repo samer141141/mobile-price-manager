@@ -578,12 +578,6 @@ export default function Home() {
                         setCheckingMarket(true);
                         setError("");
                         try {
-                          const params = new URLSearchParams({
-                            model: marketForm.model.trim(),
-                            storage: String(marketForm.storage_gb || ""),
-                          });
-                          const sessionResult = await supabase.auth.getSession();
-                          const accessToken = sessionResult.data.session?.access_token;
                           const blocketUrl = "https://www.blocket.se/annonser/hela_sverige/elektronik/telefoner_tillbehor/mobiltelefoner?cg=5061&q=" + encodeURIComponent([marketForm.model.trim(), marketForm.storage_gb ? marketForm.storage_gb + "GB" : ""].filter(Boolean).join(" "));
                           window.open(blocketUrl, "_blank", "noopener,noreferrer");
                           setCheckingMarket(false);
