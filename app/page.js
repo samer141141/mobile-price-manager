@@ -582,15 +582,6 @@ export default function Home() {
                           window.open(blocketUrl, "_blank", "noopener,noreferrer");
                           setCheckingMarket(false);
                           return;
-                          const responseText = await response.text();
-                          let result;
-                          try {
-                            result = JSON.parse(responseText);
-                          } catch {
-                            throw new Error("Market service returned an invalid response (" + response.status + ").");
-                          }
-                          if (!response.ok) throw new Error(result.error || "Market check failed");
-                          setLiveMarket(result);
                         } catch (e) {
                           setLiveMarket(null);
                           setError(e.message);
