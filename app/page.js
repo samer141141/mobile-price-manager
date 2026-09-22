@@ -595,6 +595,7 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
+                      className="primary"
                       disabled={!marketForm.model.trim()}
                       onClick={() => {
                         const q = encodeURIComponent([marketForm.model.trim(), marketForm.storage_gb ? marketForm.storage_gb + "GB" : ""].filter(Boolean).join(" "));
