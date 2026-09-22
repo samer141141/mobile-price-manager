@@ -15,7 +15,8 @@ import {
   payload,
   editPayload,
 } from "../lib/inventory.mjs";
-const conditions = ["Excellent", "Good", "Fair", "Damaged"],\n  marketConditions = ["Used", "Renewed", "Refurbished", "New"],
+const conditions = ["Excellent", "Good", "Fair", "Damaged"],
+  marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
   sources = ["Tradera", "Blocket", "Swappie", "Back Market", "Other"];
 async function rpc(name, args = {}) {
