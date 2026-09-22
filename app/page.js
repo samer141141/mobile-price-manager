@@ -593,6 +593,16 @@ export default function Home() {
                     >
                       {checkingMarket ? "Opening…" : "Check Blocket Prices"}
                     </button>
+                    <button
+                      type="button"
+                      disabled={!marketForm.model.trim()}
+                      onClick={() => {
+                        const q = encodeURIComponent([marketForm.model.trim(), marketForm.storage_gb ? marketForm.storage_gb + "GB" : ""].filter(Boolean).join(" "));
+                        window.open("https://www.blocket.se/nybegagnat/mobil?query=" + q, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      Check Blocket Nybegagnat
+                    </button>
                   </div>
                   {liveMarket && (() => {
                     const values = liveMarket.listings
