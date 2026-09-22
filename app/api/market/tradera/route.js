@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 function text(v) { return String(v ?? "").trim(); }
 function priceOf(item) {
@@ -27,8 +27,9 @@ function normalize(items) {
     .filter((x) => x.title && x.price);
 }
 export async function GET(request) {
-  const appId = process.env.TRADERA_APP_ID;
-  const appKey = process.env.TRADERA_APP_KEY;
+  const env = typeof process !== "undefined" ? process.env : {};
+  const appId = env.TRADERA_APP_ID;
+  const appKey = env.TRADERA_APP_KEY;
   if (!appId || !appKey)
     return NextResponse.json({ error: "Tradera is not configured." }, { status: 503 });
 
