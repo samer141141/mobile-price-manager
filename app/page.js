@@ -57,6 +57,8 @@ export default function Home() {
     }),
     [percentage, setPercentage] = useState(75),
     [expenses, setExpenses] = useState(0),
+    [liveMarket, setLiveMarket] = useState(null),
+    [checkingMarket, setCheckingMarket] = useState(false),
     [members, setMembers] = useState([]),
     [member, setMember] = useState({
       email: "",
@@ -547,10 +549,58 @@ export default function Home() {
                   recorded listing prices, not guaranteed sales.
                 </p>
                 <p className="notice">
-                  <strong>Tradera live collection is disabled.</strong> Manual
-                  Tradera and Blocket asking prices remain available. Auctions
-                  and bids are not imported; no prices or grades are guessed.
+                  <strong>Tradera live market check is available.</strong>{" "}
+                  Search by model and storage below. Manual market prices remain
+                  available and live results are shown separately until saved.
                 </p>
+                <div className="calculator">
+                  <h3>Live market check</h3>
+                  <div className="grid">
+                    <Field
+                      label="Model"
+                      value={marketForm.model}
+                      placeholder="e.g. iPhone 16 Pro Max"
+                      onChange={(v) => setMarketForm({ ...marketForm, model: v })}
+                    />
+                    <Field
+                      label="Storage (GB)"
+                      type="number"
+                      min="1"
+                      value={marketForm.storage_gb}
+                      onChange={(v) => setMarketForm({ ...marketForm, storage_gb: v })}
+                    />
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={checkingMarket || !marketForm.model.trim()}
+                      onClick={async () => {
+                        setCheckingMarket(true);
+                        setError("");
+                        try {
+                          const response = await fetch(
+                            `/api/market/tradera?model=${encodeURIComponent(marketForm.model)}&storage=${encodeURIComponent(marketForm.storage_gb)}`,
+                          );
+                          const result = await response.json();
+                          if (!response.ok) throw new Error(result.error || "Market check failed");
+                          setLiveMarket(result);
+                        } catch (e) {
+                          setLiveMarket(null);
+                          setError(e.message);
+                        } finally {
+                          setCheckingMarket(false);
+                        }
+                      }}
+                    >
+                      {checkingMarket ? "Checking…" : "Check Market Price"}
+                    </button>
+                  </div>
+                  {liveMarket && (
+                    <p>
+                      <strong>{liveMarket.listings.length}</strong> Tradera listings found ·
+                      checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
+                    </p>
+                  )}
+                </div>
                 <form
                   className="grid"
                   onSubmit={(e) => {
