@@ -457,6 +457,38 @@ export default function Home() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button onClick={() => setDetails(p)}>View</button>
+                        {!isSold(p) && (
+                          <button
+                            className="ad-button"
+                            onClick={async () => {
+                              const title = [p.model, String(p.storage_gb) + "GB", p.color].filter(Boolean).join(" – ");
+                              const lines = [
+                                "📱 " + title,
+                                "",
+                                "Säljer en " + p.model + " med " + p.storage_gb + " GB lagring i " + (p.grade ? "Grade " + p.grade : (p.condition || "fint skick")) + ".",
+                                "",
+                                "✅ Fungerar som den ska",
+                                p.battery_health != null ? "🔋 Batterihälsa: " + p.battery_health + "%" : "",
+                                p.color ? "🎨 Färg: " + p.color : "",
+                                "🔓 Olåst",
+                                p.selling_price ? "💰 Pris: " + money(p.selling_price) : "",
+                                "📦 Kan skickas med post eller hämtas enligt överenskommelse.",
+                                "",
+                                "📩 Skicka meddelande vid intresse."
+                              ].filter((line) => line !== "");
+                              const ad = title + "\n\n" + lines.join("\n");
+                              try {
+                                await navigator.clipboard.writeText(ad);
+                                setNotice("Ad copied — ready for Blocket or Facebook.");
+                                setError("");
+                              } catch {
+                                window.prompt("Copy your ad:", ad);
+                              }
+                            }}
+                          >
+                            Create Ad
+                          </button>
+                        )}
                         <button
                           disabled={busy}
                           onClick={() =>
