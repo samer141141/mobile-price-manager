@@ -5,9 +5,10 @@ export const runtime = "edge";
 function text(v) { return String(v ?? "").trim(); }
 function priceOf(item) {
   const candidates = [
-    item?.buyItNowPrice?.value, item?.buyItNowPrice,
-    item?.price?.value, item?.price,
-    item?.currentBid?.value, item?.currentBid
+    item?.buyItNowPrice?.value, item?.buyItNowPrice?.amount, item?.buyItNowPrice,
+    item?.price?.value, item?.price?.amount, item?.price,
+    item?.currentBid?.value, item?.currentBid?.amount, item?.currentBid,
+    item?.maxBid?.value, item?.maxBid
   ];
   for (const value of candidates) {
     const n = Number(value);
@@ -19,9 +20,9 @@ function normalize(items) {
   return (Array.isArray(items) ? items : [])
     .map((item) => ({
       id: String(item?.id ?? item?.itemId ?? ""),
-      title: text(item?.title ?? item?.name),
+      title: text(item?.title ?? item?.shortDescription ?? item?.name),
       price: priceOf(item),
-      url: text(item?.url ?? item?.itemUrl),
+      url: text(item?.url ?? item?.itemUrl ?? item?.itemLink),
     }))
     .filter((x) => x.title && x.price);
 }
@@ -50,9 +51,20 @@ export async function GET(request) {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok)
-      return NextResponse.json({ error: "Tradera request failed.", status: response.status }, { status: 502 });
+      return NextResponse.json({
+        error: body?.error?.message || "Tradera request failed.",
+        provider_status: response.status
+      }, { status: 502 });
 
-    const items = body?.items ?? body?.results ?? body?.data ?? body;
+    const items =
+      body?.items ??
+      body?.searchItems ??
+      body?.itemList ??
+      body?.results?.items ??
+      body?.results ??
+      body?.data?.items ??
+      body?.data ??
+      body;
     return NextResponse.json({
       source: "Tradera",
       query,
