@@ -577,8 +577,13 @@ export default function Home() {
                         setCheckingMarket(true);
                         setError("");
                         try {
+                          const params = new URLSearchParams({
+                            model: marketForm.model.trim(),
+                            storage: String(marketForm.storage_gb || ""),
+                          });
                           const response = await fetch(
-                            `/api/market/tradera?model=${encodeURIComponent(marketForm.model)}&storage=${encodeURIComponent(marketForm.storage_gb)}`,
+                            window.location.origin + "/api/market/tradera?" + params.toString(),
+                            { headers: { Accept: "application/json" } },
                           );
                           const result = await response.json();
                           if (!response.ok) throw new Error(result.error || "Market check failed");
