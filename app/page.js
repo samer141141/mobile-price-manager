@@ -668,17 +668,22 @@ export default function Home() {
                 {stats ? (
                   <>
                     <p>
-                      {stats.count} matching records for the model, storage and
+                      {stats.count} reliable matching records for the model, storage and
                       condition selected above.
+                      {stats.removedOutliers > 0
+                        ? ` ${stats.removedOutliers} unusual price${stats.removedOutliers === 1 ? "" : "s"} excluded automatically.`
+                        : ""}
                     </p>
                     <div className="cards">
                       <Card
-                        title="Average Market Price"
-                        value={money(stats.average)}
+                        title="Typical Market Price"
+                        value={money(stats.median ?? stats.average)}
+                        detail="Median of reliable matching listings"
                       />
                       <Card
-                        title="Minimum / Maximum"
+                        title="Market Range"
                         value={`${money(stats.min)} / ${money(stats.max)}`}
+                        detail="Low / high after outlier filtering"
                       />
                       {financial && (
                         <>
