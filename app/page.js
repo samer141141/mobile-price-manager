@@ -594,12 +594,45 @@ export default function Home() {
                       {checkingMarket ? "Checking…" : "Check Market Price"}
                     </button>
                   </div>
-                  {liveMarket && (
-                    <p>
-                      <strong>{liveMarket.listings.length}</strong> Tradera listings found ·
-                      checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
-                    </p>
-                  )}
+                  {liveMarket && (() => {
+                    const values = liveMarket.listings
+                      .map((item) => Number(item.price))
+                      .filter((n) => Number.isFinite(n) && n > 0)
+                      .sort((a, b) => a - b);
+                    if (!values.length)
+                      return <p>No usable fixed-price listings were returned.</p>;
+                    const medianOf = (arr) =>
+                      arr.length % 2
+                        ? arr[Math.floor(arr.length / 2)]
+                        : (arr[arr.length / 2 - 1] + arr[arr.length / 2]) / 2;
+                    let clean = values;
+                    if (values.length >= 4) {
+                      const lower = values.slice(0, Math.floor(values.length / 2));
+                      const upper = values.slice(Math.ceil(values.length / 2));
+                      const q1 = medianOf(lower), q3 = medianOf(upper), iqr = q3 - q1;
+                      clean = values.filter((n) => n >= q1 - 1.5 * iqr && n <= q3 + 1.5 * iqr);
+                    }
+                    const typical = medianOf(clean);
+                    const recommended = typical * Number(percentage || 0) / 100;
+                    const expected = typical - recommended - Number(expenses || 0);
+                    return (
+                      <>
+                        <p>
+                          <strong>{liveMarket.listings.length}</strong> Tradera listings found ·
+                          {values.length - clean.length > 0 ? ` ${values.length - clean.length} unusual price(s) excluded ·` : ""}
+                          {" "}checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
+                        </p>
+                        <div className="cards">
+                          <Card title="Live Typical Price" value={money(typical)} detail="Median after outlier filtering" />
+                          <Card title="Live Market Range" value={`${money(Math.min(...clean))} / ${money(Math.max(...clean))}`} detail="Reliable Tradera range" />
+                          {financial && <>
+                            <Card title="Max Buy Price" value={money(recommended)} detail={`${percentage || 0}% of typical price`} />
+                            <Card title="Expected Profit" value={money(expected)} detail="After estimated costs" />
+                          </>}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
                 <form
                   className="grid"
