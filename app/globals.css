@@ -450,7 +450,7 @@ footer {
     overflow: visible;
   }
   .inventory-head {
-    display: none;
+    display: none !important;
   }
   .inventory-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
