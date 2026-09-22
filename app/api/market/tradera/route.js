@@ -27,9 +27,14 @@ function normalize(items) {
     .filter((x) => x.title && x.price);
 }
 export async function GET(request) {
-  const env = typeof process !== "undefined" ? process.env : {};
-  const appId = env.TRADERA_APP_ID;
-  const appKey = env.TRADERA_APP_KEY;
+  let appId = process.env.TRADERA_APP_ID;
+  let appKey = process.env.TRADERA_APP_KEY;
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    const cfEnv = getCloudflareContext().env || {};
+    appId = cfEnv.TRADERA_APP_ID || appId;
+    appKey = cfEnv.TRADERA_APP_KEY || appKey;
+  } catch {}
   if (!appId || !appKey)
     return NextResponse.json({ error: "Tradera is not configured." }, { status: 503 });
 
