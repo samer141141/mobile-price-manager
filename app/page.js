@@ -72,6 +72,7 @@ export default function Home() {
     market = data?.market_prices || [];
   const load = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
       setData(await rpc("lager_dashboard"));
     } catch (e) {
