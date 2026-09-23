@@ -2605,3 +2605,144 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* Desktop sizing pass: balanced spacing and usable inventory width on large screens */
+@media (min-width: 1200px) {
+  main {
+    max-width: 1540px;
+    padding: 26px 34px 52px;
+  }
+
+  .app-shell {
+    width: 100%;
+    max-width: 1470px;
+    padding-top: 18px;
+    padding-bottom: 36px;
+  }
+
+  .dashboard-header {
+    min-height: 108px;
+    padding: 20px 24px;
+    border-radius: 21px;
+  }
+
+  .dashboard-header .brand-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 28px;
+  }
+
+  .overview-heading {
+    margin-top: 22px;
+    margin-bottom: 12px;
+  }
+
+  .workspace-nav {
+    margin: 18px 0 16px;
+    padding: 5px;
+    border-radius: 14px;
+  }
+
+  .workspace-nav button {
+    min-height: 38px;
+    padding: 7px 13px;
+  }
+
+  .workspace-panel,
+  .market-panel {
+    padding: 22px 24px;
+    border-radius: 18px;
+  }
+
+  .inventory-toolbar {
+    min-width: 470px;
+    max-width: 520px;
+  }
+
+  .inventory-table {
+    overflow-x: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .inventory-row {
+    min-width: 1120px;
+    grid-template-columns:
+      minmax(150px, 1.45fr)
+      repeat(4, minmax(72px, .68fr))
+      minmax(92px, .78fr)
+      minmax(300px, 1.85fr);
+    gap: 8px;
+    min-height: 54px;
+    padding: 9px 11px;
+  }
+
+  .financial .inventory-row {
+    min-width: 1360px;
+    grid-template-columns:
+      minmax(150px, 1.4fr)
+      repeat(4, minmax(72px, .65fr))
+      repeat(4, minmax(82px, .78fr))
+      minmax(92px, .78fr)
+      minmax(315px, 1.9fr);
+  }
+
+  .inventory-row .actions {
+    gap: 4px;
+  }
+
+  .inventory-row .actions button {
+    min-height: 32px;
+    padding: 5px 7px;
+    font-size: 10.5px;
+  }
+
+  dialog {
+    width: min(900px, calc(100% - 64px));
+    padding: 24px;
+  }
+
+  .ops-modal {
+    width: min(900px, calc(100vw - 80px));
+    max-height: min(88vh, 900px);
+    padding: 20px 22px;
+  }
+
+  .ops-phone-sheet {
+    width: min(1040px, calc(100vw - 80px));
+  }
+
+  .ops-hero {
+    padding: 20px 22px;
+  }
+
+  .ops-grid {
+    grid-template-columns: minmax(0, 1.55fr) minmax(340px, .72fr);
+    gap: 16px;
+  }
+
+  .ops-grid.lower {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .daily-actions-panel,
+  .workflow-overview-panel,
+  .supplier-panel,
+  .accounting-panel,
+  .audit-panel {
+    padding: 20px;
+    border-radius: 17px;
+  }
+
+  .quick-action-grid button {
+    min-height: 42px;
+  }
+
+  .ad-copy-field textarea {
+    min-height: 260px;
+  }
+}
