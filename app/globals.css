@@ -1257,3 +1257,204 @@ footer {
   .dashboard-header .brand p { max-width: 230px; }
   .live-status { padding: 7px 9px; font-size: 10px; }
 }
+
+
+/* Mobile readability + action toolbar + ad builder */
+.dashboard-header .header-actions button,
+.dashboard-header .header-actions button:not(.primary):not(.danger) {
+  background: rgba(255,255,255,.10);
+  color: #fff;
+  border-color: rgba(255,255,255,.18);
+  box-shadow: none;
+}
+.dashboard-header .header-actions button:hover:not(:disabled) {
+  background: rgba(255,255,255,.17);
+  color: #fff;
+}
+.workspace-nav button.active,
+.workspace-nav button.active:not(.primary):not(.danger) {
+  background: linear-gradient(135deg, #103d33, #195646);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 14px rgba(14,63,51,.16);
+}
+
+.inventory-toolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  min-width: min(100%, 510px);
+}
+.inventory-toolbar .tool-button,
+.inventory-toolbar .import-button {
+  min-height: 46px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.inventory-toolbar .import-button,
+.inventory-toolbar .export-tool {
+  border: 1px solid #cfe0d8;
+  background: linear-gradient(180deg,#ffffff,#f7faf8);
+  color: #17463a;
+  box-shadow: 0 5px 14px rgba(20,66,55,.055);
+}
+.inventory-toolbar .import-button:hover,
+.inventory-toolbar .export-tool:hover:not(:disabled) {
+  background: #edf6f1;
+  border-color: #b9d4c8;
+}
+.inventory-toolbar .add-phone-button {
+  border-color: #103b32;
+  background: linear-gradient(135deg,#12483b,#0d362d);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(13,54,45,.17);
+}
+.inventory-toolbar .tool-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  color: inherit;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+}
+.inventory-toolbar .import-button > span,
+.inventory-toolbar button > span {
+  margin: 0;
+}
+.ad-button {
+  border-color: #cddfd7;
+  background: #eff7f3 !important;
+  color: #15513f !important;
+  font-weight: 750;
+}
+.ad-button:hover:not(:disabled) {
+  background: #e3f1ea !important;
+}
+
+.ad-builder {
+  display: grid;
+  gap: 14px;
+}
+.ad-builder > p {
+  margin: 0;
+}
+.ad-platforms {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 8px;
+}
+.ad-platforms button {
+  min-height: 42px;
+  font-weight: 750;
+  border-color: #d6e3dd;
+  color: #315d50;
+  background: #f8fbf9;
+}
+.ad-platforms button.active,
+.ad-platforms button.active:not(.primary):not(.danger) {
+  background: linear-gradient(135deg,#123f35,#1a5747);
+  color: #fff;
+  border-color: transparent;
+}
+.ad-copy-field textarea {
+  min-height: 290px;
+  line-height: 1.5;
+  background: #fbfdfc;
+}
+.ad-builder-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #7a8984;
+  font-size: 11px;
+}
+.ad-builder-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .workspace-panel .title {
+    align-items: stretch;
+  }
+  .workspace-panel .title > div:first-child {
+    width: 100%;
+  }
+  .workspace-panel .inventory-toolbar {
+    width: 100%;
+    min-width: 0;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .workspace-panel .inventory-toolbar .tool-button,
+  .workspace-panel .inventory-toolbar .import-button {
+    width: 100%;
+    min-height: 46px;
+    font-size: 13px;
+    padding: 9px 10px;
+  }
+  .workspace-panel .inventory-toolbar .add-phone-button {
+    grid-column: 1 / -1;
+    min-height: 50px;
+    font-size: 14px;
+  }
+  .workspace-panel .filter-bar {
+    display: grid !important;
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+    gap: 8px;
+    overflow: visible !important;
+    margin: 10px 0 14px !important;
+    padding: 9px !important;
+  }
+  .workspace-panel .filter-bar label {
+    flex: none !important;
+    min-width: 0;
+    width: auto;
+  }
+  .workspace-panel .filter-bar label:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .workspace-panel .filter-bar select {
+    width: 100%;
+  }
+  .ad-platforms {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  .ad-copy-field textarea {
+    min-height: 330px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-header .header-actions {
+    grid-template-columns: 1fr 1fr 1fr !important;
+  }
+  .dashboard-header .header-actions button,
+  .dashboard-header .role-badge {
+    font-size: 10px;
+  }
+  .workspace-nav button {
+    color: #526e64;
+  }
+  .workspace-nav button.active {
+    color: #fff;
+  }
+  .workspace-panel .filter-bar {
+    grid-template-columns: 1fr !important;
+  }
+  .workspace-panel .filter-bar label:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}

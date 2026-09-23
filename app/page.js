@@ -24,6 +24,73 @@ async function rpc(name, args = {}) {
   if (error) throw new Error(error.message);
   return data;
 }
+
+function buildMarketplaceAd(phone, platform = "Facebook") {
+  const model = phone.model || "iPhone";
+  const storage = phone.storage_gb ? phone.storage_gb + "GB" : "";
+  const color = phone.color || "";
+  const battery = phone.battery_health != null ? phone.battery_health + "%" : "";
+  const condition = phone.condition || (phone.grade ? "Grade " + phone.grade : "fint skick");
+  const price = Number(phone.selling_price || 0) > 0 ? money(phone.selling_price) : "";
+  const title = [model, storage, color].filter(Boolean).join(" – ");
+
+  const base = [
+    "📱 " + title,
+    "",
+    "Säljer en " + model + (storage ? " med " + storage + " lagring" : "") + ".",
+    "Skick: " + condition + ".",
+    battery ? "🔋 Batterihälsa: " + battery : "",
+    color ? "🎨 Färg: " + color : "",
+    "🔓 Olåst",
+    "✅ Testad och fungerar som den ska",
+    price ? "💰 Pris: " + price : "",
+    "📦 Kan skickas med post eller hämtas enligt överenskommelse.",
+  ].filter(Boolean);
+
+  if (platform === "Blocket") {
+    return [
+      title,
+      "",
+      ...base.slice(2),
+      "",
+      "Trygg affär: köp kan göras via Blocket för säker betalning.",
+      "📩 Skicka meddelande vid intresse.",
+    ].join("\n");
+  }
+
+  if (platform === "Tradera") {
+    return [
+      title,
+      "",
+      ...base.slice(2),
+      "",
+      "Enheten är testad professionellt och fungerar som den ska.",
+      "Skickas väl emballerad.",
+      "Lycka till i auktionen!",
+    ].join("\n");
+  }
+
+  if (platform === "TikTok") {
+    return [
+      "📱 " + [model, storage].filter(Boolean).join(" "),
+      battery ? "🔋 Batteri " + battery : "",
+      price ? "💰 " + price : "",
+      "📦 Kan skickas",
+      "📩 DM vid intresse",
+      "",
+      "#iphone #apple #begagnat #sverige #mobil #iphoneforsale",
+    ].filter(Boolean).join("\n");
+  }
+
+  return [
+    ...base,
+    "",
+    "📩 Skicka PM vid intresse.",
+    "⚡ Först till kvarn!",
+    "",
+    "#iphone #apple #begagnat #sverige #mobil",
+  ].join("\n");
+}
 export default function Home() {
   const router = useRouter();
   const [data, setData] = useState(null),
@@ -64,6 +131,7 @@ export default function Home() {
     [dealBattery, setDealBattery] = useState(85),
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
+    [adBuilder, setAdBuilder] = useState(null),
     [members, setMembers] = useState([]),
     [member, setMember] = useState({
       email: "",
@@ -402,9 +470,10 @@ export default function Home() {
                       {search ? " matching your search" : ""}
                     </p>
                   </div>
-                  <div className="actions">
-                    <label className="import-button">
-                      Import Excel
+                  <div className="actions inventory-toolbar">
+                    <label className="import-button tool-button import-tool">
+                      <span className="tool-icon" aria-hidden="true">↑</span>
+                      <span>Import Excel</span>
                       <input
                         type="file"
                         accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -416,6 +485,7 @@ export default function Home() {
                       />
                     </label>
                     <button
+                      className="tool-button export-tool"
                       disabled={busy || !filtered.length}
                       onClick={() => {
                         setSelected(
@@ -426,10 +496,11 @@ export default function Home() {
                         setExporting(true);
                       }}
                     >
-                      Export
+                      <span className="tool-icon" aria-hidden="true">↓</span>
+                      <span>Export</span>
                     </button>
                     <button
-                      className="primary"
+                      className="primary tool-button add-phone-button"
                       onClick={() =>
                         setEditor({
                           id: null,
@@ -441,7 +512,8 @@ export default function Home() {
                         })
                       }
                     >
-                      + Add Phone
+                      <span className="tool-icon" aria-hidden="true">＋</span>
+                      <span>Add Phone</span>
                     </button>
                   </div>
                 </div>
@@ -568,25 +640,13 @@ export default function Home() {
                         {!isSold(p) && (
                           <button
                             className="ad-button"
-                            onClick={() => {
-                              const title = [p.model, String(p.storage_gb) + "GB", p.color].filter(Boolean).join(" – ");
-                              const lines = [
-                                "📱 " + title,
-                                "",
-                                "Säljer en " + p.model + " med " + p.storage_gb + " GB lagring i " + (p.grade ? "Grade " + p.grade : (p.condition || "fint skick")) + ".",
-                                "",
-                                "✅ Fungerar som den ska",
-                                p.battery_health != null ? "🔋 Batterihälsa: " + p.battery_health + "%" : "",
-                                p.color ? "🎨 Färg: " + p.color : "",
-                                "🔓 Olåst",
-                                p.selling_price ? "💰 Pris: " + money(p.selling_price) : "",
-                                "📦 Kan skickas med post eller hämtas enligt överenskommelse.",
-                                "",
-                                "📩 Skicka meddelande vid intresse."
-                              ].filter(Boolean);
-                              const ad = title + "\n\n" + lines.join("\n");
-                              window.prompt("Your ad is ready — copy it:", ad);
-                            }}
+                            onClick={() =>
+                              setAdBuilder({
+                                phone: p,
+                                platform: "Facebook",
+                                text: buildMarketplaceAd(p, "Facebook"),
+                              })
+                            }
                           >
                             Create Ad
                           </button>
@@ -1227,6 +1287,70 @@ export default function Home() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+      {adBuilder && (
+        <Modal
+          title={`Create Ad · ${adBuilder.phone.model}`}
+          onClose={() => setAdBuilder(null)}
+          error=""
+        >
+          <div className="ad-builder">
+            <p>
+              Choose a marketplace. The Swedish ad text is generated from the phone data and can be edited before copying.
+            </p>
+            <div className="ad-platforms" role="group" aria-label="Marketplace">
+              {["Facebook", "Blocket", "Tradera", "TikTok"].map((platform) => (
+                <button
+                  type="button"
+                  key={platform}
+                  className={adBuilder.platform === platform ? "active" : ""}
+                  onClick={() =>
+                    setAdBuilder({
+                      ...adBuilder,
+                      platform,
+                      text: buildMarketplaceAd(adBuilder.phone, platform),
+                    })
+                  }
+                >
+                  {platform}
+                </button>
+              ))}
+            </div>
+            <label className="wide ad-copy-field">
+              <span>Ad text</span>
+              <textarea
+                rows="15"
+                value={adBuilder.text}
+                onChange={(e) =>
+                  setAdBuilder({ ...adBuilder, text: e.target.value })
+                }
+              />
+            </label>
+            <div className="ad-builder-meta">
+              <span>{adBuilder.platform}</span>
+              <span>{adBuilder.text.length} characters</span>
+            </div>
+            <div className="actions ad-builder-actions">
+              <button type="button" onClick={() => setAdBuilder(null)}>
+                Close
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(adBuilder.text);
+                    setNotice(adBuilder.platform + " ad copied.");
+                  } catch {
+                    window.prompt("Copy your ad:", adBuilder.text);
+                  }
+                }}
+              >
+                Copy Ad
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
       {details && (
