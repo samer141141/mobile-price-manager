@@ -779,6 +779,7 @@ export default function Home() {
                     const traderaMeta = (liveMarket.sources || []).find((s) => s.source === "Tradera");
                     const excludedAuctions = Number(traderaMeta?.excluded_auctions || 0);
                     const excludedProblems = Number(traderaMeta?.excluded_problem_listings || 0);
+                    const confidence = traderaMeta?.confidence || (clean.length >= 5 ? "high" : clean.length >= 3 ? "medium" : "low");
                     const recommended = typical * Number(percentage || 0) / 100;
                     const expected = typical - recommended - Number(expenses || 0);
                     return (
@@ -788,10 +789,10 @@ export default function Home() {
                           {excludedAuctions > 0 ? ` ${excludedAuctions} auction price(s) ignored ·` : ""}
                           {excludedProblems > 0 ? ` ${excludedProblems} repair/damaged listing(s) ignored ·` : ""}
                           {removedOutliers > 0 ? ` ${removedOutliers} unusual fixed price(s) excluded ·` : ""}
-                          {" "}checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
+                          {" "}Confidence: <strong>{confidence}</strong> · checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
                         </p>
                         <div className="cards">
-                          <Card title="Live Typical Price" value={money(typical)} detail="Median of fixed-price / Buy Now listings only" />
+                          <Card title="Live Typical Price" value={money(typical)} detail={"Fixed-price / Buy Now only · " + confidence + " confidence"} />
                           <Card title="Live Market Range" value={`${money(marketMin)} / ${money(marketMax)}`} detail="Fixed-price range after filtering" />
                           {financial && <>
                             <Card title="Max Buy Price" value={money(recommended)} detail={`${percentage || 0}% of typical price`} />
