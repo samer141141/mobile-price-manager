@@ -1014,29 +1014,24 @@ export default function Home() {
                     );
                   })()}
                 </div>
-                <div className="calculator">
-                  <h3>Should I Buy?</h3>
-                  <p>Enter the seller's asking price. The decision uses the latest live resale reference, your estimated costs and battery health.</p>
-                  <div className="grid">
-                    <Field label="Seller asking price (SEK)" type="number" min="0" value={dealPrice} onChange={setDealPrice} />
-                    <Field label="Battery health (%)" type="number" min="0" max="100" value={dealBattery} onChange={setDealBattery} />
-                  </div>
-                  {(() => {
-                    const vals=(liveMarket?.listings||[]).map(x=>Number(x.price)).filter(n=>n>0).sort((a,b)=>a-b);
-                    if(!vals.length || !Number(dealPrice)) return <p className="empty">Run Check Live Market and enter the seller price to evaluate the deal.</p>;
-                    const mid=Number(liveMarket?.market_summary?.typical_price) || (vals.length%2?vals[Math.floor(vals.length/2)]:(vals[vals.length/2-1]+vals[vals.length/2])/2);
-                    const batteryPenalty=Number(dealBattery)<80?700:Number(dealBattery)<85?350:0;
-                    const net=mid-Number(dealPrice)-Number(expenses||0)-batteryPenalty;
-                    const margin=mid?net/mid:0;
-                    const verdict=margin>=0.22?"Great Deal":margin>=0.12?"OK":"Too Expensive";
-                    return <div className="cards">
-                      <Card title="Decision" value={verdict} detail={"Estimated margin "+Math.round(margin*100)+"%"} />
-                      <Card title="Market Resale" value={money(mid)} />
-                      <Card title="Total Cost" value={money(Number(dealPrice)+Number(expenses||0)+batteryPenalty)} detail={batteryPenalty?"Includes battery risk allowance":"No battery allowance"} />
-                      {financial && <Card title="Expected Profit" value={money(net)} />}
-                    </div>;
-                  })()}
-                </div>
+                <SuggestedPricePanel
+                  recommendations={recommendations}
+                  confidence={(liveMarket?.sources || []).find((s) => s.source === "Tradera")?.confidence}
+                />
+                <SmartBuyPanel
+                  analysis={smartBuy}
+                  dealPrice={dealPrice}
+                  setDealPrice={setDealPrice}
+                  dealBattery={dealBattery}
+                  setDealBattery={setDealBattery}
+                  expenses={expenses}
+                  setExpenses={setExpenses}
+                />
+                <PriceHistoryPanel
+                  points={historyPoints}
+                  range={historyRange}
+                  setRange={setHistoryRange}
+                />
                 <div className="calculator">
                   <h3>Competitor Buy Offers</h3>
                   <p>
@@ -1218,6 +1213,29 @@ export default function Home() {
                   </table>
                 </div>
               </section>
+            )}
+            {tab === "insights" && financial && (
+              <InsightsPanel insights={insights} onDeal={openDealCalculator} />
+            )}
+            {tab === "ads" && (
+              <AdCenterPanel
+                records={adRecords}
+                onReopen={(record) => {
+                  const phone =
+                    phones.find((p) => String(p.id) === String(record.phoneId)) || {
+                      id: record.phoneId,
+                      model: record.model,
+                      storage_gb: record.storage_gb,
+                    };
+                  setAdBuilder({
+                    phone,
+                    platform: record.platform,
+                    text: record.text,
+                  });
+                }}
+                onStatus={updateAdRecordStatus}
+                onDelete={deleteAdRecord}
+              />
             )}
             {tab === "team" && access.role === "admin" && (
               <section className="panel">
@@ -1477,6 +1495,12 @@ export default function Home() {
               <button type="button" onClick={() => setAdBuilder(null)}>
                 Close
               </button>
+              <button type="button" onClick={() => saveAdRecord("Draft")}>
+                Save Draft
+              </button>
+              <button type="button" onClick={() => saveAdRecord("Published")}>
+                Mark Published
+              </button>
               <button
                 type="button"
                 className="primary"
@@ -1493,6 +1517,15 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+      {dealCalculator && (
+        <Modal
+          title={`Deal Calculator · ${dealCalculator.phone.model}`}
+          onClose={() => setDealCalculator(null)}
+          error=""
+        >
+          <DealCalculatorContent state={dealCalculator} />
         </Modal>
       )}
       {details && (
