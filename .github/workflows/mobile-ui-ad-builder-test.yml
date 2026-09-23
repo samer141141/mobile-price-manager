@@ -1,0 +1,26 @@
+name: Mobile UI Ad Builder Test
+
+on:
+  push:
+    branches:
+      - fix/mobile-ui-ad-builder
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build OpenNext worker
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Verify worker artifact
+        run: test -f .open-next/worker.js
