@@ -15,6 +15,20 @@ import {
   payload,
   editPayload,
 } from "../lib/inventory.mjs";
+import {
+  businessInsights,
+  historyFor,
+  marketRecommendations,
+  smartBuyAnalysis,
+} from "../lib/business-intelligence.mjs";
+import {
+  AdCenterPanel,
+  DealCalculatorContent,
+  InsightsPanel,
+  PriceHistoryPanel,
+  SmartBuyPanel,
+  SuggestedPricePanel,
+} from "../components/business-tools";
 const conditions = ["Excellent", "Good", "Fair", "Damaged"],
   marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
@@ -132,6 +146,10 @@ export default function Home() {
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
     [adBuilder, setAdBuilder] = useState(null),
+    [priceHistory, setPriceHistory] = useState([]),
+    [historyRange, setHistoryRange] = useState(30),
+    [adRecords, setAdRecords] = useState([]),
+    [dealCalculator, setDealCalculator] = useState(null),
     [members, setMembers] = useState([]),
     [member, setMember] = useState({
       email: "",
@@ -180,6 +198,16 @@ export default function Home() {
     const saved = localStorage.getItem("lager-buy-percentage");
     if (saved !== null && Number(saved) >= 0 && Number(saved) <= 100)
       setPercentage(Number(saved));
+    try {
+      setPriceHistory(JSON.parse(localStorage.getItem("lager-price-history") || "[]"));
+    } catch {
+      setPriceHistory([]);
+    }
+    try {
+      setAdRecords(JSON.parse(localStorage.getItem("lager-ad-center") || "[]"));
+    } catch {
+      setAdRecords([]);
+    }
     return () => {
       live = false;
       subscription.unsubscribe();
@@ -197,6 +225,67 @@ export default function Home() {
       setError(e.message);
     } finally {
       setBusy(false);
+    }
+  }
+  function persistPriceHistory(next) {
+    const trimmed = next.slice(-500);
+    setPriceHistory(trimmed);
+    localStorage.setItem("lager-price-history", JSON.stringify(trimmed));
+  }
+  function persistAdRecords(next) {
+    const trimmed = next.slice(0, 250);
+    setAdRecords(trimmed);
+    localStorage.setItem("lager-ad-center", JSON.stringify(trimmed));
+  }
+  function saveAdRecord(status = "Draft") {
+    if (!adBuilder) return;
+    const record = {
+      id: Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+      phoneId: String(adBuilder.phone.id ?? ""),
+      model: adBuilder.phone.model,
+      storage_gb: adBuilder.phone.storage_gb,
+      platform: adBuilder.platform,
+      text: adBuilder.text,
+      status,
+      createdAt: new Date().toISOString(),
+    };
+    persistAdRecords([record, ...adRecords]);
+    setNotice(status === "Published" ? "Ad marked as published." : "Ad saved to Ad Center.");
+  }
+  function updateAdRecordStatus(id, status) {
+    persistAdRecords(
+      adRecords.map((record) => (record.id === id ? { ...record, status } : record)),
+    );
+  }
+  function deleteAdRecord(id) {
+    persistAdRecords(adRecords.filter((record) => record.id !== id));
+  }
+  async function openDealCalculator(phone) {
+    setDealCalculator({ phone, loading: true, error: "", analysis: null });
+    try {
+      const params = new URLSearchParams({
+        model: phone.model || "",
+        storage: String(phone.storage_gb || ""),
+      });
+      const response = await fetch("/api/market/compare?" + params.toString(), {
+        cache: "no-store",
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error || "Market comparison failed.");
+      setDealCalculator({
+        phone,
+        loading: false,
+        error: "",
+        analysis: marketRecommendations(body.market_summary),
+        market: body,
+      });
+    } catch (e) {
+      setDealCalculator({
+        phone,
+        loading: false,
+        error: e.message,
+        analysis: null,
+      });
     }
   }
   const business = phones.filter(
@@ -230,6 +319,21 @@ export default function Home() {
       marketForm,
       Number(percentage),
       Number(expenses),
+    );
+  const insights = businessInsights(phones, saleHistory),
+    recommendations = marketRecommendations(liveMarket?.market_summary),
+    smartBuy = smartBuyAnalysis({
+      summary: liveMarket?.market_summary,
+      askingPrice: dealPrice,
+      expenses,
+      buyPercentage: percentage,
+      batteryHealth: dealBattery,
+    }),
+    historyPoints = historyFor(
+      priceHistory,
+      marketForm.model,
+      marketForm.storage_gb,
+      historyRange,
     );
   async function readImportFile(file) {
     setError("");
