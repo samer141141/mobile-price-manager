@@ -538,6 +538,8 @@ export default function Home() {
                 ["sold", "Sold Phones"],
                 ["samer", "Samer"],
                 ["market", "Market Prices"],
+                ...(financial ? [["insights", "Insights"]] : []),
+                ["ads", "Ad Center"],
                 ...(access.role === "admin"
                   ? [["team", "Team Permissions"]]
                   : []),
@@ -754,7 +756,16 @@ export default function Home() {
                           >
                             Create Ad
                           </button>
-                        )}                        <button
+                        )}
+                        {financial && !isSold(p) && (
+                          <button
+                            className="deal-button"
+                            onClick={() => openDealCalculator(p)}
+                          >
+                            Deal
+                          </button>
+                        )}
+                        <button
                           disabled={busy}
                           onClick={() =>
                             setEditor({
