@@ -323,10 +323,12 @@ export default function OperationsCenter({
     price: "",
   });
   const [photos, setPhotos] = useState([]);
+  const [scanStatus, setScanStatus] = useState("");
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
   const restoreRef = useRef(null);
   const scannerRef = useRef(null);
+  const inventoryScannerRef = useRef(null);
   const photoRef = useRef(null);
 
   useEffect(() => {
@@ -456,12 +458,48 @@ export default function OperationsCenter({
 
   async function handleImeiScan(file) {
     if (!file) return;
+    setScanStatus("Starting scan…");
     try {
-      const imei = await scanImeiFile(file);
-      setPurchase((p) => ({ ...p, imei }));
-      setNotice("IMEI scanned successfully.");
+      const result = await scanImeiFile(file, setScanStatus);
+      setPurchase((p) => ({ ...p, imei: result.imei }));
+      setNotice(
+        result.method === "ocr"
+          ? "IMEI read from printed digits."
+          : "IMEI scanned from barcode / QR.",
+      );
     } catch (e) {
       setError(e.message);
+    } finally {
+      setScanStatus("");
+    }
+  }
+
+  async function handleInventoryScan(file) {
+    if (!file) return;
+    setScanStatus("Starting scan…");
+    try {
+      const result = await scanDeviceFile(file, setScanStatus);
+      const found = findPhoneFromCode(phones, result.raw);
+      if (!found.phone) {
+        const parsed = found.parsed;
+        throw new Error(
+          parsed.imei
+            ? "IMEI was read, but this phone is not in Lager iPhone."
+            : "The scanned code is not a Lager iPhone device code.",
+        );
+      }
+      setSelected(found.phone);
+      setPanel("quick");
+      setQuery("");
+      setNotice(
+        result.method === "ocr"
+          ? "Phone opened from IMEI text."
+          : "Phone opened from barcode / QR.",
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setScanStatus("");
     }
   }
 
