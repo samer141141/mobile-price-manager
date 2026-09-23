@@ -44,6 +44,8 @@ export default function Home() {
     [details, setDetails] = useState(null),
     [deleting, setDeleting] = useState(null),
     [exporting, setExporting] = useState(false),
+    [importing, setImporting] = useState(false),
+    [importRows, setImportRows] = useState([]),
     [selected, setSelected] = useState(
       columns.filter(([k]) => !sensitive.includes(k)).map(([k]) => k),
     ),
@@ -159,6 +161,84 @@ export default function Home() {
       Number(percentage),
       Number(expenses),
     );
+  async function readImportFile(file) {
+    setError("");
+    setNotice("");
+    try {
+      if (!file) return;
+      if (!/\.xlsx$/i.test(file.name)) throw new Error("Please choose an Excel .xlsx file.");
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const sheet = workbook.worksheets[0];
+      if (!sheet) throw new Error("The Excel file has no worksheet.");
+      const norm = (v) => String(v ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const aliases = {
+        model: ["model","modell","phone","telefon"],
+        storage_gb: ["storage","storagegb","lagring","gb","minne"],
+        color: ["color","colour","farg","färg"],
+        grade: ["grade","gradering"],
+        battery_health: ["battery","batteryhealth","batteri","batterihalsa","batterihälsa"],
+        condition: ["condition","skick"],
+        imei: ["imei"],
+        status: ["status"],
+        purchase_price: ["purchaseprice","inkopspris","inköpspris","buyprice"],
+        repair_cost: ["repaircost","reparation","reparationskostnad"],
+        other_cost: ["othercost","othercosts","ovrigkostnad","övrigkostnad"],
+        selling_price: ["sellingprice","saleprice","forsaljningspris","försäljningspris","pris"],
+        purchase_source: ["purchasesource","source","kalla","källa","inkopsstalle","inköpsställe"],
+        notes: ["notes","note","anteckning","anteckningar"]
+      };
+      const header = [];
+      sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => { header[col] = norm(cell.text); });
+      const mapping = {};
+      Object.entries(aliases).forEach(([key, names]) => {
+        const found = header.findIndex((h) => names.map(norm).includes(h));
+        if (found > 0) mapping[key] = found;
+      });
+      if (!mapping.model || !mapping.storage_gb) throw new Error("Excel needs Model and Storage columns.");
+      const numeric = new Set(["storage_gb","battery_health","purchase_price","repair_cost","other_cost","selling_price"]);
+      const rows = [];
+      for (let r = 2; r <= sheet.rowCount; r++) {
+        const row = sheet.getRow(r);
+        const item = { ...blank, inventory_scope: tab === "samer" ? "samer" : "business" };
+        Object.entries(mapping).forEach(([key, col]) => {
+          let value = row.getCell(col).value;
+          if (value && typeof value === "object") value = value.text ?? value.result ?? "";
+          value = String(value ?? "").trim();
+          if (numeric.has(key)) value = value === "" ? (key === "battery_health" ? "" : 0) : Number(value.replace(/[^0-9.,-]/g, "").replace(",", "."));
+          item[key] = value;
+        });
+        if (String(item.model).trim()) rows.push(item);
+      }
+      if (!rows.length) throw new Error("No phones found in the Excel file.");
+      setImportRows(rows);
+      setImporting(true);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  async function importPhones() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      let added = 0;
+      for (const row of importRows) {
+        await rpc("lager_save_phone", { phone_id: null, payload: payload(row, financial) });
+        added++;
+      }
+      setImporting(false);
+      setImportRows([]);
+      setNotice(added + " phones imported successfully.");
+      await load();
+    } catch (e) {
+      setError("Import stopped: " + e.message);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
   async function exportPhones() {
     setBusy(true);
     setError("");
@@ -307,6 +387,18 @@ export default function Home() {
                     </p>
                   </div>
                   <div className="actions">
+                    <label className="import-button">
+                      Import Excel
+                      <input
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          readImportFile(file);
+                        }}
+                      />
+                    </label>
                     <button
                       disabled={busy || !filtered.length}
                       onClick={() => {
@@ -1184,6 +1276,36 @@ export default function Home() {
               }
             >
               Delete Phone
+            </button>
+          </div>
+        </Modal>
+      )}
+      {importing && (
+        <Modal
+          title="Import Excel"
+          onClose={() => !busy && setImporting(false)}
+          error={error}
+        >
+          <p><strong>{importRows.length}</strong> phones found. Review before adding them to inventory.</p>
+          <div className="table">
+            <table>
+              <thead><tr><th>Model</th><th>Storage</th><th>Color</th><th>Grade</th><th>Battery</th><th>Purchase</th><th>Selling</th></tr></thead>
+              <tbody>
+                {importRows.slice(0, 100).map((p, i) => (
+                  <tr key={i}>
+                    <td>{p.model}</td><td>{p.storage_gb} GB</td><td>{p.color || "—"}</td>
+                    <td>{p.grade || "—"}</td><td>{p.battery_health === "" ? "—" : p.battery_health + "%"}</td>
+                    <td>{financial ? money(p.purchase_price) : "—"}</td><td>{money(p.selling_price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {importRows.length > 100 && <p>Showing first 100 rows. All {importRows.length} will be imported.</p>}
+          <div className="actions">
+            <button disabled={busy} onClick={() => setImporting(false)}>Cancel</button>
+            <button className="primary" disabled={busy || !importRows.length} onClick={importPhones}>
+              {busy ? "Importing…" : "Import All"}
             </button>
           </div>
         </Modal>
