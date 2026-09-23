@@ -21,6 +21,7 @@ import {
   findPhoneFromCode,
   parseDeviceCode,
 } from "../lib/device-codes.mjs";
+import { parseThreeUToolsText } from "../lib/threeutools.mjs";
 
 const OPS_KEY = "lager-ops-v2";
 const AUDIT_KEY = "lager-audit-v2";
@@ -174,17 +175,23 @@ async function scanDeviceFile(file, onProgress) {
     await worker.setParameters({
       tessedit_char_whitelist: "0123456789",
       preserve_interword_spaces: "1",
+      tessedit_pageseg_mode: "11",
     });
-    const result = await worker.recognize(processed);
-    const text = result?.data?.text || "";
-    const imei = extractImeiFromText(text);
-    if (imei) return { raw: imei, imei, method: "ocr", text };
+
+    const sources = [processed, file];
+    for (let i = 0; i < sources.length; i += 1) {
+      onProgress?.(i === 0 ? "Reading enhanced IMEI image…" : "Trying original image…");
+      const result = await worker.recognize(sources[i]);
+      const text = result?.data?.text || "";
+      const imei = extractImeiFromText(text);
+      if (imei) return { raw: imei, imei, method: "ocr", text };
+    }
   } finally {
     await worker.terminate();
   }
 
   throw new Error(
-    "Could not read an IMEI. Fill the frame with the 15-digit IMEI, keep the phone steady, avoid glare, and try again.",
+    "Could not read an IMEI. Fill most of the frame with the 15-digit IMEI, keep it sharp, avoid glare, and try again.",
   );
 }
 
@@ -291,6 +298,7 @@ export default function OperationsCenter({
   onOpenDeal,
   onReplaceAdRecords,
   onReplacePriceHistory,
+  onPhotoCountChange,
   setNotice,
   setError,
 }) {
@@ -330,6 +338,7 @@ export default function OperationsCenter({
   const scannerRef = useRef(null);
   const inventoryScannerRef = useRef(null);
   const photoRef = useRef(null);
+  const threeURef = useRef(null);
 
   useEffect(() => {
     setOps(readJson(OPS_KEY, {}));
@@ -474,6 +483,27 @@ export default function OperationsCenter({
     }
   }
 
+  async function handleThreeUToolsFile(file) {
+    if (!file) return;
+    try {
+      const parsed = parseThreeUToolsText(await file.text());
+      setPurchase((current) => ({
+        ...current,
+        ...(parsed.model ? { model: parsed.model } : {}),
+        ...(parsed.storage_gb ? { storage_gb: parsed.storage_gb } : {}),
+        ...(parsed.color ? { color: parsed.color } : {}),
+        ...(parsed.imei ? { imei: parsed.imei } : {}),
+        ...(parsed.battery_health !== "" ? { battery_health: parsed.battery_health } : {}),
+        ...(parsed.notes
+          ? { notes: [current.notes, parsed.notes].filter(Boolean).join(" · ") }
+          : {}),
+      }));
+      setNotice("3uTools data imported into the purchase form.");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function handleInventoryScan(file) {
     if (!file) return;
     setScanStatus("Starting scan…");
@@ -606,6 +636,7 @@ export default function OperationsCenter({
       await idbPutPhoto(photo);
       const next = await idbPhotos(selected.id);
       setPhotos(next);
+      onPhotoCountChange?.(selected.id, next.length);
       logAction("Photo added", selected);
       setNotice("Photo saved on this device.");
     } catch (e) {
@@ -615,7 +646,11 @@ export default function OperationsCenter({
 
   async function removePhoto(id) {
     await idbDeletePhoto(id);
-    if (selected) setPhotos(await idbPhotos(selected.id));
+    if (selected) {
+      const next = await idbPhotos(selected.id);
+      setPhotos(next);
+      onPhotoCountChange?.(selected.id, next.length);
+    }
   }
 
   async function saveSale() {
@@ -1050,6 +1085,24 @@ export default function OperationsCenter({
 
             {purchaseStep === 1 && (
               <div className="grid">
+                <label className="wide">
+                  <span>3uTools device data</span>
+                  <div className="inline-input-action">
+                    <button type="button" onClick={() => threeURef.current?.click()}>Import 3uTools</button>
+                    <small className="scan-help">In 3uTools use View iDevice Details → Open in Notepad, save the text file, then import it here.</small>
+                  </div>
+                  <input
+                    ref={threeURef}
+                    hidden
+                    type="file"
+                    accept=".txt,.log,text/plain"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      handleThreeUToolsFile(file);
+                    }}
+                  />
+                </label>
                 <label>
                   <span>Model</span>
                   <input value={purchase.model} onChange={(e) => setPurchase({ ...purchase, model: e.target.value })} placeholder="iPhone 15 Pro" />
@@ -1185,7 +1238,7 @@ export default function OperationsCenter({
               <button type="button" className={panel === "test" ? "active" : ""} onClick={() => setPanel("test")}>✓ Test</button>
               <button type="button" className={panel === "repair" ? "active" : ""} onClick={() => setPanel("repair")}>⌁ Repair</button>
               <button type="button" className={panel === "photos" ? "active" : ""} onClick={() => setPanel("photos")}>▣ Photos</button>
-              <button type="button" onClick={() => onOpenAd(selected)}>✦ Create Ad</button>
+              <button type="button" onClick={() => onOpenAd(selected, photos)}>✦ Create Ad</button>
               <button type="button" onClick={() => onOpenDeal(selected)}>↗ Price</button>
               <button
                 type="button"
@@ -1215,7 +1268,7 @@ export default function OperationsCenter({
                 <div className="wide actions">
                   <button type="button" onClick={markReady}>Mark Ready</button>
                   <button type="button" onClick={markListed}>Mark Listed</button>
-                  <button type="button" onClick={() => onOpenAd(selected)}>Relist</button>
+                  <button type="button" onClick={() => onOpenAd(selected, photos)}>Relist</button>
                   <button
                     type="button"
                     onClick={async () => {
@@ -1329,7 +1382,14 @@ export default function OperationsCenter({
                 <div className="photo-grid">
                   {photos.map((photo) => (
                     <figure key={photo.id}>
-                      <img src={photo.dataUrl} alt={selected.model + " inventory"} />
+                      <button
+                        type="button"
+                        className="photo-preview-button"
+                        title="Open photo"
+                        onClick={() => window.open(photo.dataUrl, "_blank", "noopener,noreferrer")}
+                      >
+                        <img src={photo.dataUrl} alt={selected.model + " inventory"} />
+                      </button>
                       <button type="button" onClick={() => removePhoto(photo.id)}>×</button>
                     </figure>
                   ))}
