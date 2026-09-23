@@ -884,6 +884,33 @@ export default function Home() {
                           const body = await response.json();
                           if (!response.ok) throw new Error(body?.error || "Market comparison failed.");
                           setLiveMarket(body);
+                          const summary = body.market_summary;
+                          if (summary?.typical_price) {
+                            const snapshot = {
+                              id: Date.now(),
+                              model: marketForm.model.trim(),
+                              storage_gb: Number(marketForm.storage_gb || 0),
+                              price: Number(summary.typical_price),
+                              min: Number(summary.min_price || summary.typical_price),
+                              max: Number(summary.max_price || summary.typical_price),
+                              sample_count: Number(summary.sample_count || body.listings?.length || 0),
+                              confidence:
+                                (body.sources || []).find((s) => s.source === "Tradera")?.confidence ||
+                                "unknown",
+                              at: new Date().toISOString(),
+                            };
+                            persistPriceHistory([...priceHistory, snapshot]);
+                            rpc("lager_add_market", {
+                              payload: {
+                                model: snapshot.model,
+                                storage_gb: snapshot.storage_gb,
+                                condition: marketForm.condition || "Good",
+                                source: "Tradera",
+                                market_price: snapshot.price,
+                                listing_url: "https://www.tradera.com/category/340186",
+                              },
+                            }).catch(() => {});
+                          }
                           if (!body.listings?.length && !body.trade_in_offers?.length) {
                             const statuses = (body.sources || []).map((s) => s.source + ": " + s.status).join(" · ");
                             setNotice("Live prices are not available from the connected sources yet. You can still open the direct trade-in calculators. " + statuses);
