@@ -791,12 +791,13 @@ export default function Home() {
                   </p>
                   {(() => {
                     const buySources = new Set(["Apple Trade In", "Elgiganten Trade-In", "PhoneHero"]);
+                    const autoOffers = (liveMarket?.trade_in_offers || []).filter((r) => Number(r.price) > 0);
                     const offers = market.filter((r) =>
                       buySources.has(r.source) &&
                       String(r.model || "").toLowerCase() === String(marketForm.model || "").toLowerCase() &&
                       String(r.storage_gb || "") === String(marketForm.storage_gb || "")
                     );
-                    const values = offers.map((r) => Number(r.market_price)).filter((n) => Number.isFinite(n) && n > 0);
+                    const values = [...offers.map((r) => Number(r.market_price)), ...autoOffers.map((r) => Number(r.price))].filter((n) => Number.isFinite(n) && n > 0);
                     const best = values.length ? Math.max(...values) : null;
                     const resale = liveMarket?.listings?.map((x) => Number(x.price)).filter((n) => Number.isFinite(n) && n > 0).sort((a,b) => a-b) || [];
                     const resaleTypical = resale.length ? (resale.length % 2 ? resale[Math.floor(resale.length/2)] : (resale[resale.length/2-1]+resale[resale.length/2])/2) : null;
@@ -810,6 +811,14 @@ export default function Home() {
                           <Card title="Resale Reference" value={resaleTypical == null ? "—" : money(resaleTypical)} detail="Live listing median; kept separate from trade-in offers" />
                           {financial && <Card title="Projected Profit" value={projected == null ? "—" : money(projected)} detail="Resale reference − customer offer − costs" />}
                         </div>
+                        {autoOffers.length > 0 && (
+                          <div className="table">
+                            <table>
+                              <thead><tr><th>Live Source</th><th>Offer</th><th>Updated</th><th>Link</th></tr></thead>
+                              <tbody>{autoOffers.map((o, i) => <tr key={"auto-"+i}><td>{o.source}</td><td>{money(o.price)}</td><td>{o.updated || "Live"}</td><td>{o.url ? <a href={o.url} target="_blank" rel="noopener noreferrer">Open</a> : "—"}</td></tr>)}</tbody>
+                            </table>
+                          </div>
+                        )}
                         {offers.length > 0 && (
                           <div className="table">
                             <table>
