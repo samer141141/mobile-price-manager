@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.15.1",
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/sync-cloudflare-runtime-secrets.mjs && opennextjs-cloudflare build",
+    "build": "opennextjs-cloudflare build && node scripts/install-wrangler-deploy-wrapper.mjs",
     "start": "next start",
     "test": "node --test tests/*.test.mjs",
     "test:e2e": "playwright test",
