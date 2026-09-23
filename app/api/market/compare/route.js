@@ -47,12 +47,7 @@ function prisjaktListings(body) {
   }).filter(x => x.title && x.price);
 }
 async function envValues() {
-  let env = process.env;
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    env = { ...env, ...(getCloudflareContext().env || {}) };
-  } catch {}
-  return env;
+  return process.env;
 }
 async function fetchTradera(env, query) {
   if (!env.TRADERA_APP_ID || !env.TRADERA_APP_KEY)
