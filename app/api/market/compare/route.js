@@ -12,6 +12,45 @@ function numberFrom(...values) {
   }
   return null;
 }
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+function summarizeMarket(listings) {
+  const values = listings
+    .map((item) => Number(item?.price))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+
+  if (!values.length) return null;
+
+  let clean = values;
+  if (values.length >= 4) {
+    const lower = values.slice(0, Math.floor(values.length / 2));
+    const upper = values.slice(Math.ceil(values.length / 2));
+    const q1 = median(lower);
+    const q3 = median(upper);
+    const iqr = q3 - q1;
+    if (Number.isFinite(iqr) && iqr > 0) {
+      clean = values.filter(
+        (n) => n >= q1 - 1.5 * iqr && n <= q3 + 1.5 * iqr,
+      );
+    }
+  }
+
+  return {
+    sample_count: clean.length,
+    raw_count: values.length,
+    excluded_outliers: values.length - clean.length,
+    typical_price: median(clean),
+    min_price: clean[0],
+    max_price: clean[clean.length - 1],
+  };
+}
 function flatten(value) {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return [];
@@ -96,6 +135,7 @@ export async function GET(request) {
     fetchPhoneHeroReference(model, storage)
   ]);
   const listings=sourceResults.flatMap(s=>s.listings);
+  const marketSummary=summarizeMarket(listings);
   const directLinks = [
     {source:"Apple Trade In",status:"manual_quote_available",url:"https://www.apple.com/se/shop/trade-in"},
     {source:"Elgiganten Trade-In",status:"manual_quote_available",url:"https://www.elgiganten.se/tjanster-tillbehor/tjanster/trade-in"}
@@ -105,6 +145,7 @@ export async function GET(request) {
     query,checked_at:new Date().toISOString(),
     sources:sources.map(({listings,...s})=>({...s,count:listings.length})),
     listings,
+    market_summary: marketSummary,
     trade_in_offers:phoneHero.offers || [],
     trade_in_links:directLinks
   });
