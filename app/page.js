@@ -783,6 +783,45 @@ export default function Home() {
                     );
                   })()}
                 </div>
+                <div className="calculator">
+                  <h3>Competitor Buy Offers</h3>
+                  <p>
+                    Record direct trade-in / purchase quotes separately from resale listings.
+                    This makes it easy to see what competitors would pay the customer and how much room you have to beat their offer.
+                  </p>
+                  {(() => {
+                    const buySources = new Set(["Apple Trade In", "Elgiganten Trade-In", "PhoneHero"]);
+                    const offers = market.filter((r) =>
+                      buySources.has(r.source) &&
+                      String(r.model || "").toLowerCase() === String(marketForm.model || "").toLowerCase() &&
+                      String(r.storage_gb || "") === String(marketForm.storage_gb || "")
+                    );
+                    const values = offers.map((r) => Number(r.market_price)).filter((n) => Number.isFinite(n) && n > 0);
+                    const best = values.length ? Math.max(...values) : null;
+                    const resale = liveMarket?.listings?.map((x) => Number(x.price)).filter((n) => Number.isFinite(n) && n > 0).sort((a,b) => a-b) || [];
+                    const resaleTypical = resale.length ? (resale.length % 2 ? resale[Math.floor(resale.length/2)] : (resale[resale.length/2-1]+resale[resale.length/2])/2) : null;
+                    const beatOffer = best == null ? null : Math.ceil((best + 100) / 50) * 50;
+                    const projected = resaleTypical == null || beatOffer == null ? null : resaleTypical - beatOffer - Number(expenses || 0);
+                    return (
+                      <>
+                        <div className="cards">
+                          <Card title="Best Competitor Offer" value={best == null ? "—" : money(best)} detail={values.length ? values.length + " recorded direct offer(s)" : "Add Apple / Elgiganten / PhoneHero quotes below"} />
+                          {financial && <Card title="Suggested Customer Offer" value={beatOffer == null ? "—" : money(beatOffer)} detail={beatOffer == null ? "Waiting for competitor quote" : "Competitor best + at least 100 SEK"} />}
+                          <Card title="Resale Reference" value={resaleTypical == null ? "—" : money(resaleTypical)} detail="Live listing median; kept separate from trade-in offers" />
+                          {financial && <Card title="Projected Profit" value={projected == null ? "—" : money(projected)} detail="Resale reference − customer offer − costs" />}
+                        </div>
+                        {offers.length > 0 && (
+                          <div className="table">
+                            <table>
+                              <thead><tr><th>Source</th><th>Offer</th><th>Model</th><th>Storage</th></tr></thead>
+                              <tbody>{offers.map((o, i) => <tr key={o.id ?? i}><td>{o.source}</td><td>{money(o.market_price)}</td><td>{o.model}</td><td>{o.storage_gb} GB</td></tr>)}</tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
                 <form
                   className="grid"
                   onSubmit={(e) => {
