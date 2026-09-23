@@ -15,6 +15,12 @@ import {
   marketRecommendations,
   smartBuyAnalysis,
 } from "../lib/business-intelligence.mjs";
+import {
+  deviceCodePayload,
+  extractImeiFromText,
+  findPhoneFromCode,
+  parseDeviceCode,
+} from "../lib/device-codes.mjs";
 
 const OPS_KEY = "lager-ops-v2";
 const AUDIT_KEY = "lager-audit-v2";
