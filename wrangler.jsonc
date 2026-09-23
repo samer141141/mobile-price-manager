@@ -23,11 +23,5 @@
   "observability": {
     "enabled": true
   },
-  "keep_vars": true,
-  "secrets": {
-    "required": [
-      "TRADERA_APP_ID",
-      "TRADERA_APP_KEY"
-    ]
-  }
+  "keep_vars": true
 }
