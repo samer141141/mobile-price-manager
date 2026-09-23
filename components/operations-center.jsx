@@ -796,6 +796,9 @@ export default function OperationsCenter({
         <div className="actions ops-hero-actions">
           <button type="button" onClick={backupAll}>Backup</button>
           <button type="button" onClick={() => restoreRef.current?.click()}>Restore</button>
+          <button type="button" className="scan-device-button" onClick={() => inventoryScannerRef.current?.click()}>
+            ▣ Scan Device
+          </button>
           <button type="button" className="primary" onClick={() => setPurchaseOpen(true)}>＋ New Purchase</button>
           <input
             ref={restoreRef}
@@ -808,8 +811,27 @@ export default function OperationsCenter({
               restoreBackup(file);
             }}
           />
+          <input
+            ref={inventoryScannerRef}
+            hidden
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              handleInventoryScan(file);
+            }}
+          />
         </div>
       </div>
+
+      {scanStatus && (
+        <div className="scan-status" role="status">
+          <span className="scan-spinner" aria-hidden="true" />
+          {scanStatus}
+        </div>
+      )}
 
       <div className="ops-search">
         <span>⌕</span>
@@ -1022,8 +1044,9 @@ export default function OperationsCenter({
                   <span>IMEI</span>
                   <div className="inline-input-action">
                     <input inputMode="numeric" maxLength="15" value={purchase.imei} onChange={(e) => setPurchase({ ...purchase, imei: e.target.value.replace(/\D/g, "").slice(0, 15) })} />
-                    <button type="button" onClick={() => scannerRef.current?.click()}>Scan</button>
+                    <button type="button" onClick={() => scannerRef.current?.click()}>Scan IMEI</button>
                   </div>
+                  <small className="scan-help">Works with a barcode/QR or the 15 printed IMEI digits shown on another phone.</small>
                   <input
                     ref={scannerRef}
                     hidden
@@ -1142,6 +1165,19 @@ export default function OperationsCenter({
               <button type="button" className={panel === "photos" ? "active" : ""} onClick={() => setPanel("photos")}>▣ Photos</button>
               <button type="button" onClick={() => onOpenAd(selected)}>✦ Create Ad</button>
               <button type="button" onClick={() => onOpenDeal(selected)}>↗ Price</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await printDeviceLabel(selected);
+                    logAction("Device label printed", selected);
+                  } catch (e) {
+                    setError(e.message);
+                  }
+                }}
+              >
+                ▦ Label
+              </button>
               <button type="button" className={panel === "sale" ? "active" : ""} onClick={() => setPanel("sale")}>$ Sell</button>
               {String(selected.status).toLowerCase() === "sold" && (
                 <button type="button" className={panel === "receipt" ? "active" : ""} onClick={() => setPanel("receipt")}>Receipt</button>
@@ -1158,6 +1194,19 @@ export default function OperationsCenter({
                   <button type="button" onClick={markReady}>Mark Ready</button>
                   <button type="button" onClick={markListed}>Mark Listed</button>
                   <button type="button" onClick={() => onOpenAd(selected)}>Relist</button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await printDeviceLabel(selected);
+                        logAction("Device label printed", selected);
+                      } catch (e) {
+                        setError(e.message);
+                      }
+                    }}
+                  >
+                    Print Barcode Label
+                  </button>
                 </div>
               </div>
             )}
