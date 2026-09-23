@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchTraderaMarket } from "../../../../lib/tradera-market";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,16 +25,6 @@ function flatten(value) {
   }
   return [];
 }
-function traderaListings(body) {
-  const items = body?.items ?? body?.searchItems ?? body?.itemList ?? body?.results?.items ?? body?.results ?? body?.data?.items ?? body?.data ?? body;
-  return flatten(items).map((item) => ({
-    id: String(item?.id ?? item?.itemId ?? ""),
-    source: "Tradera",
-    title: text(item?.title ?? item?.shortDescription ?? item?.name),
-    price: numberFrom(item?.buyItNowPrice?.value,item?.buyItNowPrice?.amount,item?.buyItNowPrice,item?.price?.value,item?.price?.amount,item?.price,item?.currentBid?.value,item?.currentBid?.amount,item?.currentBid),
-    url: text(item?.url ?? item?.itemUrl ?? item?.itemLink)
-  })).filter(x => x.title && x.price);
-}
 function prisjaktListings(body) {
   return flatten(body).map((item) => {
     const low = item?.lowestPrice ?? item?.offer?.lowestPrice ?? item?.offers?.[0] ?? {};
@@ -53,17 +44,12 @@ async function envValues() {
   // because that module cannot be resolved while OpenNext bundles this route.
   return process.env;
 }
-async function fetchTradera(env, query) {
-  if (!env.TRADERA_APP_ID || !env.TRADERA_APP_KEY)
-    return { source:"Tradera", status:"not_configured", listings:[] };
+async function fetchTradera(model, storage) {
   try {
-    const u = new URL("https://api.tradera.com/v4/search");
-    u.searchParams.set("query", query);
-    const r = await fetch(u,{headers:{"X-App-Id":env.TRADERA_APP_ID,"X-App-Key":env.TRADERA_APP_KEY,Accept:"application/json"},cache:"no-store"});
-    const body = await r.json().catch(()=>({}));
-    if (!r.ok) return { source:"Tradera", status:"error", error:body?.error?.message || ("HTTP "+r.status), listings:[] };
-    return { source:"Tradera", status:"ok", listings:traderaListings(body) };
-  } catch { return { source:"Tradera", status:"error", error:"Could not reach Tradera.", listings:[] }; }
+    return await fetchTraderaMarket(model, storage);
+  } catch {
+    return { source:"Tradera", status:"error", error:"Could not reach Tradera.", listings:[] };
+  }
 }
 async function fetchPrisjakt(env, query) {
   if (!env.PRISJAKT_CLIENT_ID || !env.PRISJAKT_CLIENT_SECRET || !env.PRISJAKT_REF_ID)
@@ -106,7 +92,7 @@ export async function GET(request) {
   const query=[model,Number.isFinite(storage)&&storage>0?storage+"GB":""].filter(Boolean).join(" ");
   const env=await envValues();
   const [sourceResults, phoneHero] = await Promise.all([
-    Promise.all([fetchTradera(env,query),fetchPrisjakt(env,query)]),
+    Promise.all([fetchTradera(model,storage),fetchPrisjakt(env,query)]),
     fetchPhoneHeroReference(model, storage)
   ]);
   const listings=sourceResults.flatMap(s=>s.listings);
