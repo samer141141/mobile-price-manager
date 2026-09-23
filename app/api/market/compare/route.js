@@ -77,13 +77,35 @@ async function fetchPrisjakt(env, query) {
     return { source:"Prisjakt",status:"ok",listings:prisjaktListings(body) };
   } catch { return { source:"Prisjakt",status:"error",error:"Could not reach Prisjakt.",listings:[] }; }
 }
+async function fetchPhoneHeroReference(model, storage) {
+  try {
+    const r = await fetch("https://phonehero.se/salj-din-gamla-mobil-till-oss", { cache: "no-store" });
+    if (!r.ok) return { source: "PhoneHero", status: "error", offers: [] };
+    const html = await r.text();
+    const normalized = html.replace(/&nbsp;|&#160;/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    const wanted = (model + " " + storage + " GB").replace(/\s+/g, " ").trim().toLowerCase();
+    const pos = normalized.toLowerCase().indexOf(wanted);
+    if (pos < 0) return { source: "PhoneHero", status: "manual_quote_available", offers: [] };
+    const nearby = normalized.slice(pos, pos + 500);
+    const m = nearby.match(/([0-9][0-9 ]{2,})\s*(?:kr|SEK)/i);
+    const price = m ? Number(m[1].replace(/[^0-9]/g, "")) : 0;
+    if (!price) return { source: "PhoneHero", status: "manual_quote_available", offers: [] };
+    return { source: "PhoneHero", status: "ok", offers: [{ source: "PhoneHero", price, url: "https://phonehero.se/salj-din-gamla-mobil-till-oss", updated: "Public quote/reference" }] };
+  } catch {
+    return { source: "PhoneHero", status: "error", offers: [] };
+  }
+}
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const model=text(searchParams.get("model")), storage=Number(searchParams.get("storage"));
   if (!model) return NextResponse.json({error:"Model is required."},{status:400});
   const query=[model,Number.isFinite(storage)&&storage>0?storage+"GB":""].filter(Boolean).join(" ");
   const env=await envValues();
-  const sources=await Promise.all([fetchTradera(env,query),fetchPrisjakt(env,query)]);
-  const listings=sources.flatMap(s=>s.listings);
-  return NextResponse.json({query,checked_at:new Date().toISOString(),sources:sources.map(({listings,...s})=>({...s,count:listings.length})),listings});
+  const [sourceResults, phoneHero] = await Promise.all([
+    Promise.all([fetchTradera(env,query),fetchPrisjakt(env,query)]),
+    fetchPhoneHeroReference(model, storage)
+  ]);
+  const listings=sourceResults.flatMap(s=>s.listings);
+  const sources=[...sourceResults,{source:phoneHero.source,status:phoneHero.status,listings:[]}];
+  return NextResponse.json({query,checked_at:new Date().toISOString(),sources:sources.map(({listings,...s})=>({...s,count:listings.length})),listings,trade_in_offers:phoneHero.offers || []});
 }
