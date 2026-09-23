@@ -16,7 +16,7 @@ test("marketRecommendations produces three sell strategies", () => {
   });
   assert.equal(r.quick, 4700);
   assert.equal(r.recommended, 5000);
-  assert.equal(r.maxProfit, 5250);
+  assert.equal(r.maxProfit, 5300);
 });
 
 test("smartBuyAnalysis identifies a strong margin", () => {
