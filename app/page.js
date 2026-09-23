@@ -29,6 +29,7 @@ import {
   SmartBuyPanel,
   SuggestedPricePanel,
 } from "../components/business-tools";
+import OperationsCenter from "../components/operations-center";
 const conditions = ["Excellent", "Good", "Fair", "Damaged"],
   marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
@@ -535,6 +536,7 @@ export default function Home() {
             <nav className="workspace-nav" aria-label="Dashboard sections">
               {[
                 ["available", "Available Phones"],
+                ["operations", "Operations"],
                 ["sold", "Sold Phones"],
                 ["samer", "Samer"],
                 ["market", "Market Prices"],
@@ -1235,6 +1237,48 @@ export default function Home() {
                 }}
                 onStatus={updateAdRecordStatus}
                 onDelete={deleteAdRecord}
+              />
+            )}
+            {tab === "operations" && (
+              <OperationsCenter
+                phones={phones}
+                saleHistory={saleHistory}
+                financial={financial}
+                adRecords={adRecords}
+                priceHistory={priceHistory}
+                onCreatePhone={async (form) => {
+                  await rpc("lager_save_phone", {
+                    phone_id: null,
+                    payload: payload(form, financial),
+                  });
+                  await load();
+                }}
+                onSavePhone={async (phone, changes) => {
+                  await rpc("lager_save_phone", {
+                    phone_id: String(phone.id),
+                    payload: changes,
+                  });
+                  await load();
+                }}
+                onTransition={async (phone, newStatus) => {
+                  await rpc("lager_transition_phone", {
+                    phone_id: String(phone.id),
+                    new_status: newStatus,
+                  });
+                  await load();
+                }}
+                onOpenAd={(phone) =>
+                  setAdBuilder({
+                    phone,
+                    platform: "Facebook",
+                    text: buildMarketplaceAd(phone, "Facebook"),
+                  })
+                }
+                onOpenDeal={openDealCalculator}
+                onReplaceAdRecords={persistAdRecords}
+                onReplacePriceHistory={persistPriceHistory}
+                setNotice={setNotice}
+                setError={setError}
               />
             )}
             {tab === "team" && access.role === "admin" && (
