@@ -37,10 +37,4 @@ jobs:
           echo "TRADERA_PRICE_SAMPLES"
           grep -oE '[0-9][0-9 .]{1,8}(kr|SEK)' /tmp/tradera.html | head -20 || true
           echo "TRADERA_HTML_CONTEXT"
-          python - <<'PY'
-from pathlib import Path
-s=Path('/tmp/tradera.html').read_text(errors='ignore')
-needle='/item/340186/'
-i=s.find(needle)
-print(s[max(0,i-1200):i+2600] if i>=0 else 'no item link found')
-PY
+          python -c "from pathlib import Path; s=Path('/tmp/tradera.html').read_text(errors='ignore'); needle='/item/340186/'; i=s.find(needle); print(s[max(0,i-1200):i+2600] if i>=0 else 'no item link found')"
