@@ -264,17 +264,18 @@ export default function Home() {
     }
   }
   return (
-    <main>
-      <header>
+    <main className="app-shell">
+      <header className="dashboard-header">
         <div className="brand">
-          <span className="brand-icon">Li</span>
-          <div>
+          <span className="brand-icon">LI</span>
+          <div className="brand-copy">
+            <span className="brand-kicker">Inventory command center</span>
             <h1>Lager iPhone</h1>
-            <p>Your inventory. A clearer overview.</p>
+            <p>Inventory · Market intelligence · Sales</p>
           </div>
         </div>
-        <div className="actions">
-          <span className="badge">{access?.role || "Connecting"}</span>
+        <div className="actions header-actions">
+          <span className="badge role-badge">{access?.role || "Connecting"}</span>
           <button
             disabled={loading || busy}
             onClick={() => {
@@ -309,7 +310,15 @@ export default function Home() {
       ) : (
         data && (
           <>
-            <section className="cards">
+            <div className="overview-heading">
+              <div>
+                <span className="section-kicker">Dashboard</span>
+                <h2>Business overview</h2>
+                <p>Everything important at a glance.</p>
+              </div>
+              <span className="live-status"><i />Live data</span>
+            </div>
+            <section className="cards kpi-grid">
               <Card title="Available Phones" value={available.length} />
               <Card title="Sold Phones" value={sold.length} />
               {financial ? (
@@ -351,7 +360,7 @@ export default function Home() {
                 />
               )}
             </section>
-            <nav aria-label="Dashboard sections">
+            <nav className="workspace-nav" aria-label="Dashboard sections">
               {[
                 ["available", "Available Phones"],
                 ["sold", "Sold Phones"],
@@ -378,7 +387,7 @@ export default function Home() {
               ))}
             </nav>
             {["available", "sold", "samer"].includes(tab) && (
-              <section className="panel">
+              <section className="panel workspace-panel">
                 <div className="title">
                   <div>
                     <h2>
@@ -668,7 +677,7 @@ export default function Home() {
               </section>
             )}
             {tab === "market" && (
-              <section className="panel">
+              <section className="panel market-panel">
                 <h2>Market Prices</h2>
                 <p>
                   Compare matching model, storage and condition. These are
@@ -678,8 +687,8 @@ export default function Home() {
                   <strong>Multi-source purchase-price comparison.</strong>{" "}
                   Use live sources when available and compare direct Swedish trade-in quotes from Apple and Elgiganten. Trade-in values are kept separate from resale listings.
                 </p>
-                <div className="calculator">
-                  <h3>Live market check</h3>
+                <div className="calculator market-live">
+                  <div className="calculator-heading"><span className="market-dot" /><div><span className="section-kicker">Live intelligence</span><h3>Live market check</h3></div></div>
                   <p>Tradera auction bids and starting prices are ignored. Fixed-price listings are used, and when an auction also has Buy Now, the Buy Now price is used.</p>
                   <div className="grid">
                     <Field
