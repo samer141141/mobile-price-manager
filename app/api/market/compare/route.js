@@ -48,15 +48,10 @@ function prisjaktListings(body) {
   }).filter(x => x.title && x.price);
 }
 async function envValues() {
-  const env = { ...process.env };
-  try {
-    const mod = await import("cloudflare:workers");
-    const cf = mod?.env || {};
-    for (const key of ["TRADERA_APP_ID","TRADERA_APP_KEY","PRISJAKT_CLIENT_ID","PRISJAKT_CLIENT_SECRET","PRISJAKT_REF_ID"]) {
-      if (!env[key] && cf[key]) env[key] = cf[key];
-    }
-  } catch {}
-  return env;
+  // OpenNext exposes Cloudflare text variables/secrets through process.env
+  // when nodejs_compat is enabled. Avoid importing cloudflare:workers here,
+  // because that module cannot be resolved while OpenNext bundles this route.
+  return process.env;
 }
 async function fetchTradera(env, query) {
   if (!env.TRADERA_APP_ID || !env.TRADERA_APP_KEY)
