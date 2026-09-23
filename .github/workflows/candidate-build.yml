@@ -21,7 +21,7 @@ jobs:
       - name: Refresh lockfile
         run: pnpm install --no-frozen-lockfile
       - name: Build OpenNext worker
-        run: pnpm exec opennextjs-cloudflare build
+        run: pnpm run build
       - name: Verify worker artifact
         run: test -f .open-next/worker.js
       - uses: actions/upload-artifact@v4
