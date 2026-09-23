@@ -696,10 +696,18 @@ export default function Home() {
                         setCheckingMarket(true);
                         setError("");
                         try {
-                          const blocketUrl = "https://www.blocket.se/annonser/hela_sverige/elektronik/telefoner_tillbehor/mobiltelefoner?cg=5061&q=" + encodeURIComponent([marketForm.model.trim(), marketForm.storage_gb ? marketForm.storage_gb + "GB" : ""].filter(Boolean).join(" "));
-                          window.open(blocketUrl, "_blank", "noopener,noreferrer");
-                          setCheckingMarket(false);
-                          return;
+                          const params = new URLSearchParams({
+                            model: marketForm.model.trim(),
+                            storage: String(marketForm.storage_gb || "")
+                          });
+                          const response = await fetch("/api/market/compare?" + params.toString(), { cache: "no-store" });
+                          const body = await response.json();
+                          if (!response.ok) throw new Error(body?.error || "Market comparison failed.");
+                          setLiveMarket(body);
+                          if (!body.listings?.length) {
+                            const statuses = (body.sources || []).map((s) => s.source + ": " + s.status).join(" · ");
+                            throw new Error("No live market prices returned. " + statuses);
+                          }
                         } catch (e) {
                           setLiveMarket(null);
                           setError(e.message);
@@ -708,7 +716,7 @@ export default function Home() {
                         }
                       }}
                     >
-                      {checkingMarket ? "Opening…" : "Check Blocket Prices"}
+                      {checkingMarket ? "Checking…" : "Check Live Market"}
                     </button>
                     <button
                       type="button"
@@ -746,13 +754,13 @@ export default function Home() {
                     return (
                       <>
                         <p>
-                          <strong>{liveMarket.listings.length}</strong> Tradera listings found ·
+                          <strong>{liveMarket.listings.length}</strong> live listings found from {(liveMarket.sources || []).filter((s) => s.count > 0).map((s) => s.source + " (" + s.count + ")").join(" + ") || "configured sources"} ·
                           {values.length - clean.length > 0 ? ` ${values.length - clean.length} unusual price(s) excluded ·` : ""}
                           {" "}checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
                         </p>
                         <div className="cards">
                           <Card title="Live Typical Price" value={money(typical)} detail="Median after outlier filtering" />
-                          <Card title="Live Market Range" value={`${money(Math.min(...clean))} / ${money(Math.max(...clean))}`} detail="Reliable Tradera range" />
+                          <Card title="Live Market Range" value={`${money(Math.min(...clean))} / ${money(Math.max(...clean))}`} detail="Range after outlier filtering" />
                           {financial && <>
                             <Card title="Max Buy Price" value={money(recommended)} detail={`${percentage || 0}% of typical price`} />
                             <Card title="Expected Profit" value={money(expected)} detail="After estimated costs" />
