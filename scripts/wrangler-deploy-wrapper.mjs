@@ -14,8 +14,11 @@ try {
   if (args[0] === "deploy") {
     const appId = process.env.TRADERA_APP_ID?.trim();
     const appKey = process.env.TRADERA_APP_KEY?.trim();
+    const hasSecretsFile = args.some(
+      (arg) => arg === "--secrets-file" || arg.startsWith("--secrets-file="),
+    );
 
-    if (appId && appKey) {
+    if (appId && appKey && !hasSecretsFile) {
       tempFile = join(process.cwd(), `.wrangler-deploy-secrets-${process.pid}.json`);
       writeFileSync(
         tempFile,
@@ -27,6 +30,8 @@ try {
       );
       args.push("--secrets-file", tempFile);
       console.log("Tradera runtime secrets attached to Cloudflare deploy.");
+    } else if (hasSecretsFile) {
+      console.log("Tradera runtime secrets already attached to deploy.");
     } else {
       console.log("Tradera build credentials are not present; deploy will rely on existing Worker secrets.");
     }
