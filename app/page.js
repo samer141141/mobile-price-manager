@@ -680,6 +680,7 @@ export default function Home() {
                 </p>
                 <div className="calculator">
                   <h3>Live market check</h3>
+                  <p>Tradera auction bids and starting prices are ignored. Fixed-price listings are used, and when an auction also has Buy Now, the Buy Now price is used.</p>
                   <div className="grid">
                     <Field
                       label="Model"
@@ -770,19 +771,29 @@ export default function Home() {
                       const q1 = medianOf(lower), q3 = medianOf(upper), iqr = q3 - q1;
                       clean = values.filter((n) => n >= q1 - 1.5 * iqr && n <= q3 + 1.5 * iqr);
                     }
-                    const typical = medianOf(clean);
+                    const summary = liveMarket.market_summary;
+                    const typical = Number(summary?.typical_price) || medianOf(clean);
+                    const marketMin = Number(summary?.min_price) || Math.min(...clean);
+                    const marketMax = Number(summary?.max_price) || Math.max(...clean);
+                    const removedOutliers = Number(summary?.excluded_outliers ?? (values.length - clean.length));
+                    const traderaMeta = (liveMarket.sources || []).find((s) => s.source === "Tradera");
+                    const excludedAuctions = Number(traderaMeta?.excluded_auctions || 0);
+                    const excludedProblems = Number(traderaMeta?.excluded_problem_listings || 0);
+                    const confidence = traderaMeta?.confidence || (clean.length >= 5 ? "high" : clean.length >= 3 ? "medium" : "low");
                     const recommended = typical * Number(percentage || 0) / 100;
                     const expected = typical - recommended - Number(expenses || 0);
                     return (
                       <>
                         <p>
                           <strong>{liveMarket.listings.length}</strong> live listings found from {(liveMarket.sources || []).filter((s) => s.count > 0).map((s) => s.source + " (" + s.count + ")").join(" + ") || "configured sources"} ·
-                          {values.length - clean.length > 0 ? ` ${values.length - clean.length} unusual price(s) excluded ·` : ""}
-                          {" "}checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
+                          {excludedAuctions > 0 ? ` ${excludedAuctions} auction price(s) ignored ·` : ""}
+                          {excludedProblems > 0 ? ` ${excludedProblems} repair/damaged listing(s) ignored ·` : ""}
+                          {removedOutliers > 0 ? ` ${removedOutliers} unusual fixed price(s) excluded ·` : ""}
+                          {" "}Confidence: <strong>{confidence}</strong> · checked {new Date(liveMarket.checked_at).toLocaleTimeString()}.
                         </p>
                         <div className="cards">
-                          <Card title="Live Typical Price" value={money(typical)} detail="Median after outlier filtering" />
-                          <Card title="Live Market Range" value={`${money(Math.min(...clean))} / ${money(Math.max(...clean))}`} detail="Range after outlier filtering" />
+                          <Card title="Live Typical Price" value={money(typical)} detail={"Fixed-price / Buy Now only · " + confidence + " confidence"} />
+                          <Card title="Live Market Range" value={`${money(marketMin)} / ${money(marketMax)}`} detail="Fixed-price range after filtering" />
                           {financial && <>
                             <Card title="Max Buy Price" value={money(recommended)} detail={`${percentage || 0}% of typical price`} />
                             <Card title="Expected Profit" value={money(expected)} detail="After estimated costs" />
@@ -802,7 +813,7 @@ export default function Home() {
                   {(() => {
                     const vals=(liveMarket?.listings||[]).map(x=>Number(x.price)).filter(n=>n>0).sort((a,b)=>a-b);
                     if(!vals.length || !Number(dealPrice)) return <p className="empty">Run Check Live Market and enter the seller price to evaluate the deal.</p>;
-                    const mid=vals.length%2?vals[Math.floor(vals.length/2)]:(vals[vals.length/2-1]+vals[vals.length/2])/2;
+                    const mid=Number(liveMarket?.market_summary?.typical_price) || (vals.length%2?vals[Math.floor(vals.length/2)]:(vals[vals.length/2-1]+vals[vals.length/2])/2);
                     const batteryPenalty=Number(dealBattery)<80?700:Number(dealBattery)<85?350:0;
                     const net=mid-Number(dealPrice)-Number(expenses||0)-batteryPenalty;
                     const margin=mid?net/mid:0;
