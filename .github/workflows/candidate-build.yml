@@ -1,0 +1,30 @@
+name: Candidate Build
+
+on:
+  push:
+    branches:
+      - fix/cloudflare-market-stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Refresh lockfile
+        run: pnpm install --no-frozen-lockfile
+      - name: Build OpenNext worker
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Verify worker artifact
+        run: test -f .open-next/worker.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-lockfile
+          path: pnpm-lock.yaml
