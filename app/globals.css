@@ -741,3 +741,20 @@ dialog {
   .panel { border-radius: 16px; }
   .inventory-row { box-shadow: 0 7px 20px rgba(25,67,56,.05); }
 }
+
+.import-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid #d2ded9;
+  border-radius: 11px;
+  background: white;
+  color: #173c32;
+  padding: 10px 15px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: transform .16s ease, background .16s ease;
+}
+.import-button:hover { background: #edf4f0; transform: translateY(-1px); }
+.import-button input { display: none; }
