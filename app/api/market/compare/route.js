@@ -106,6 +106,16 @@ export async function GET(request) {
     fetchPhoneHeroReference(model, storage)
   ]);
   const listings=sourceResults.flatMap(s=>s.listings);
-  const sources=[...sourceResults,{source:phoneHero.source,status:phoneHero.status,listings:[]}];
-  return NextResponse.json({query,checked_at:new Date().toISOString(),sources:sources.map(({listings,...s})=>({...s,count:listings.length})),listings,trade_in_offers:phoneHero.offers || []});
+  const directLinks = [
+    {source:"Apple Trade In",status:"manual_quote_available",url:"https://www.apple.com/se/shop/trade-in"},
+    {source:"Elgiganten Trade-In",status:"manual_quote_available",url:"https://www.elgiganten.se/tjanster-tillbehor/tjanster/trade-in"}
+  ];
+  const sources=[...sourceResults,{source:phoneHero.source,status:phoneHero.status,listings:[]},...directLinks.map(x=>({source:x.source,status:x.status,listings:[]}))];
+  return NextResponse.json({
+    query,checked_at:new Date().toISOString(),
+    sources:sources.map(({listings,...s})=>({...s,count:listings.length})),
+    listings,
+    trade_in_offers:phoneHero.offers || [],
+    trade_in_links:directLinks
+  });
 }
