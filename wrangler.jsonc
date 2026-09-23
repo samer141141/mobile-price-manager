@@ -4,14 +4,30 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-23",
   "compatibility_flags": [
-    "nodejs_compat"
+    "nodejs_compat",
+    "global_fetch_strictly_public"
   ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "lager-iphone"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  },
   "observability": {
     "enabled": true
   },
-  "keep_vars": true
+  "keep_vars": true,
+  "secrets": {
+    "required": [
+      "TRADERA_APP_ID",
+      "TRADERA_APP_KEY"
+    ]
+  }
 }
