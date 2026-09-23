@@ -44,3 +44,16 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Inspect recent version bindings
+        run: |
+          curl -fsS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/lager-iphone/versions?per_page=12" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" > /tmp/versions.json
+          jq -r '.result.items[] | [.id, (.number|tostring), (.metadata.created_on // "")] | @tsv' /tmp/versions.json | while IFS=$'\t' read -r vid vnum vdate; do
+            curl -fsS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/lager-iphone/versions/$vid" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" > /tmp/version.json
+            names=$(jq -r '[.result.resources.bindings[]?.name] | join(",")' /tmp/version.json)
+            echo "version=$vnum id=$vid created=$vdate bindings=$names"
+          done
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
