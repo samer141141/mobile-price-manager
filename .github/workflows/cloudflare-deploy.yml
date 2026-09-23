@@ -1,0 +1,46 @@
+name: Cloudflare Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build OpenNext worker
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Verify worker artifact
+        run: test -f .open-next/worker.js
+      - name: Deploy to Cloudflare
+        run: pnpm exec opennextjs-cloudflare deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify production
+        run: |
+          for i in $(seq 1 10); do
+            root_code=$(curl -L -sS -o /tmp/root.html -w "%{http_code}" --max-time 20 "https://lager-iphone.samerabouamra.workers.dev/" || true)
+            compare_code=$(curl -L -sS -o /tmp/compare.json -w "%{http_code}" --max-time 30 "https://lager-iphone.samerabouamra.workers.dev/api/market/compare?model=iPhone%2014&storage=128" || true)
+            tradera_status=$(jq -r '.sources[]? | select(.source=="Tradera") | .status' /tmp/compare.json 2>/dev/null | head -1 || true)
+            tradera_count=$(jq -r '.sources[]? | select(.source=="Tradera") | .count' /tmp/compare.json 2>/dev/null | head -1 || true)
+            echo "attempt=$i root_http=$root_code compare_http=$compare_code tradera_status=$tradera_status tradera_count=$tradera_count"
+            if [ "$root_code" = "200" ] && [ "$compare_code" = "200" ] && [ "$tradera_status" = "ok" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
