@@ -1,0 +1,38 @@
+name: Recover Public Runtime Inputs
+
+on:
+  push:
+    branches:
+      - debug/cloudflare-server-validate
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Inspect live public bundle and Tradera HTML
+        run: |
+          set -e
+          curl -L -sS --max-time 30 "https://lager-iphone.samerabouamra.workers.dev/" -o /tmp/index.html
+          grep -oE 'src="[^"]+\.js[^"]*"' /tmp/index.html | sed 's/^src="//;s/"$//' | sort -u > /tmp/jslist.txt || true
+          : > /tmp/alljs.txt
+          while read -r src; do
+            case "$src" in
+              http*) url="$src" ;;
+              *) url="https://lager-iphone.samerabouamra.workers.dev$src" ;;
+            esac
+            curl -L -sS --max-time 30 "$url" >> /tmp/alljs.txt || true
+            printf '\n' >> /tmp/alljs.txt
+          done < /tmp/jslist.txt
+
+          echo "SUPABASE_URLS"
+          grep -oE 'https://[A-Za-z0-9.-]+\.supabase\.co' /tmp/alljs.txt | sort -u || true
+          echo "SUPABASE_PUBLISHABLE_KEYS"
+          grep -oE 'sb_publishable_[A-Za-z0-9._-]+' /tmp/alljs.txt | sort -u || true
+
+          curl -L -sS --max-time 30 -A "Mozilla/5.0" "https://www.tradera.com/category/340186" -o /tmp/tradera.html
+          echo "TRADERA_HTTP_OK=$(test -s /tmp/tradera.html && echo true || echo false)"
+          echo "TRADERA_ITEM_LINK_SAMPLES"
+          grep -oE '/item/340186/[0-9]+/[^" ?<]+' /tmp/tradera.html | head -10 || true
+          echo "TRADERA_PRICE_SAMPLES"
+          grep -oE '[0-9][0-9 .]{1,8}(kr|SEK)' /tmp/tradera.html | head -20 || true
