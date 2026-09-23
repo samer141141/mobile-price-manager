@@ -16,3 +16,16 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Verify live site
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -L -sS -o /tmp/site.html -w "%{http_code}" --max-time 20 "https://lager-iphone.samerabouamra.workers.dev/" || true)
+            echo "HTTP $code"
+            if [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; then
+              test -s /tmp/site.html
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Live site did not return a successful response."
+          exit 1
