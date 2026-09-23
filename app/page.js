@@ -106,6 +106,47 @@ function buildMarketplaceAd(phone, platform = "Facebook") {
     "#iphone #apple #begagnat #sverige #mobil",
   ].join("\n");
 }
+const AD_PLATFORM_URLS = {
+  Facebook: "https://www.facebook.com/marketplace/create/item",
+  Blocket: "https://www.blocket.se/",
+  Tradera: "https://www.tradera.com/sell",
+  TikTok: "https://www.tiktok.com/upload",
+};
+
+function openPhoneMediaDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("lager-iphone-media", 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("photos")) {
+        const store = db.createObjectStore("photos", { keyPath: "id" });
+        store.createIndex("phoneId", "phoneId");
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function loadPhonePhotos(phoneId) {
+  const db = await openPhoneMediaDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("photos", "readonly");
+    const request = tx.objectStore("photos").index("phoneId").getAll(String(phoneId));
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function dataUrlToFile(dataUrl, name) {
+  const [header, encoded] = String(dataUrl || "").split(",");
+  const mime = header?.match(/data:([^;]+)/)?.[1] || "image/jpeg";
+  const binary = atob(encoded || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], name, { type: mime });
+}
+
 export default function Home() {
   const router = useRouter();
   const [data, setData] = useState(null),
@@ -147,6 +188,8 @@ export default function Home() {
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
     [adBuilder, setAdBuilder] = useState(null),
+    [photoCounts, setPhotoCounts] = useState({}),
+    [photoViewer, setPhotoViewer] = useState(null),
     [priceHistory, setPriceHistory] = useState([]),
     [historyRange, setHistoryRange] = useState(30),
     [adRecords, setAdRecords] = useState([]),
@@ -162,6 +205,27 @@ export default function Home() {
     financial = !!access?.can_view_financials,
     phones = data?.phones || [],
     market = data?.market_prices || [];
+  useEffect(() => {
+    let active = true;
+    const list = data?.phones || [];
+    if (!list.length) {
+      setPhotoCounts({});
+      return () => { active = false; };
+    }
+    Promise.all(
+      list.map(async (phone) => {
+        try {
+          const photos = await loadPhonePhotos(phone.id);
+          return [String(phone.id), photos.length];
+        } catch {
+          return [String(phone.id), 0];
+        }
+      }),
+    ).then((entries) => {
+      if (active) setPhotoCounts(Object.fromEntries(entries));
+    });
+    return () => { active = false; };
+  }, [data?.phones]);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -238,6 +302,75 @@ export default function Home() {
     setAdRecords(trimmed);
     localStorage.setItem("lager-ad-center", JSON.stringify(trimmed));
   }
+  async function openAdBuilder(phone, platform = "Facebook", text = "", suppliedPhotos = null) {
+    let photos = Array.isArray(suppliedPhotos) ? suppliedPhotos : null;
+    if (!photos) {
+      try {
+        photos = await loadPhonePhotos(phone.id);
+      } catch {
+        photos = [];
+      }
+    }
+    setPhotoCounts((current) => ({ ...current, [String(phone.id)]: photos.length }));
+    setAdBuilder({
+      phone,
+      platform,
+      text: text || buildMarketplaceAd(phone, platform),
+      photos,
+    });
+  }
+
+  async function openPhotoViewer(phone) {
+    try {
+      const photos = await loadPhonePhotos(phone.id);
+      if (!photos.length) {
+        setNotice("No saved photos for this phone.");
+        return;
+      }
+      setPhotoCounts((current) => ({ ...current, [String(phone.id)]: photos.length }));
+      setPhotoViewer({ phone, photos });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function publishAdToPlatform() {
+    if (!adBuilder) return;
+    const platform = adBuilder.platform || "Facebook";
+    const url = AD_PLATFORM_URLS[platform] || AD_PLATFORM_URLS.Facebook;
+    window.open(url, "_blank", "noopener,noreferrer");
+    try {
+      await navigator.clipboard.writeText(adBuilder.text);
+    } catch {}
+    saveAdRecord("Published");
+    setNotice(
+      platform +
+        " opened. The ad text was copied" +
+        (adBuilder.photos?.length ? " and " + adBuilder.photos.length + " phone photo(s) are ready in Lager iPhone." : "."),
+    );
+  }
+
+  async function shareAdWithPhotos() {
+    if (!adBuilder) return;
+    const files = (adBuilder.photos || []).map((photo, index) =>
+      dataUrlToFile(photo.dataUrl, "iphone-" + (index + 1) + ".jpg"),
+    );
+    try {
+      if (files.length && navigator.canShare?.({ files })) {
+        await navigator.share({
+          title: [adBuilder.phone.model, adBuilder.phone.storage_gb ? adBuilder.phone.storage_gb + "GB" : ""].filter(Boolean).join(" "),
+          text: adBuilder.text,
+          files,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(adBuilder.text);
+      setNotice("Photo sharing is not supported by this browser. Ad text copied instead.");
+    } catch (e) {
+      if (e?.name !== "AbortError") setError(e.message);
+    }
+  }
+
   function saveAdRecord(status = "Draft") {
     if (!adBuilder) return;
     const record = {
@@ -748,15 +881,19 @@ export default function Home() {
                         {!isSold(p) && (
                           <button
                             className="ad-button"
-                            onClick={() =>
-                              setAdBuilder({
-                                phone: p,
-                                platform: "Facebook",
-                                text: buildMarketplaceAd(p, "Facebook"),
-                              })
-                            }
+                            onClick={() => openAdBuilder(p)}
                           >
                             Create Ad
+                          </button>
+                        )}
+                        {Number(photoCounts[String(p.id)] || 0) > 0 && (
+                          <button
+                            type="button"
+                            className="photo-button"
+                            title="Open saved phone photos"
+                            onClick={() => openPhotoViewer(p)}
+                          >
+                            📷 {photoCounts[String(p.id)]}
                           </button>
                         )}
                         {financial && !isSold(p) && (
@@ -1229,11 +1366,7 @@ export default function Home() {
                       model: record.model,
                       storage_gb: record.storage_gb,
                     };
-                  setAdBuilder({
-                    phone,
-                    platform: record.platform,
-                    text: record.text,
-                  });
+                  openAdBuilder(phone, record.platform, record.text);
                 }}
                 onStatus={updateAdRecordStatus}
                 onDelete={deleteAdRecord}
@@ -1267,12 +1400,9 @@ export default function Home() {
                   });
                   await load();
                 }}
-                onOpenAd={(phone) =>
-                  setAdBuilder({
-                    phone,
-                    platform: "Facebook",
-                    text: buildMarketplaceAd(phone, "Facebook"),
-                  })
+                onOpenAd={(phone, photos) => openAdBuilder(phone, "Facebook", "", photos)}
+                onPhotoCountChange={(phoneId, count) =>
+                  setPhotoCounts((current) => ({ ...current, [String(phoneId)]: count }))
                 }
                 onOpenDeal={openDealCalculator}
                 onReplaceAdRecords={persistAdRecords}
@@ -1493,6 +1623,45 @@ export default function Home() {
           </form>
         </Modal>
       )}
+      {photoViewer && (
+        <Modal
+          title={`Photos · ${photoViewer.phone.model}`}
+          onClose={() => setPhotoViewer(null)}
+          error=""
+        >
+          <div className="ad-builder">
+            <p>{photoViewer.photos.length} saved photo(s) for this phone.</p>
+            <div className="ad-photo-strip photo-viewer-grid">
+              {photoViewer.photos.map((photo) => (
+                <button
+                  type="button"
+                  key={photo.id}
+                  title="Open photo"
+                  onClick={() => window.open(photo.dataUrl, "_blank", "noopener,noreferrer")}
+                >
+                  <img src={photo.dataUrl} alt={photoViewer.phone.model + " photo"} />
+                </button>
+              ))}
+            </div>
+            <div className="actions">
+              <button type="button" onClick={() => setPhotoViewer(null)}>Close</button>
+              {!isSold(photoViewer.phone) && (
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    const viewer = photoViewer;
+                    setPhotoViewer(null);
+                    openAdBuilder(viewer.phone, "Facebook", "", viewer.photos);
+                  }}
+                >
+                  Create Ad With Photos
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
       {adBuilder && (
         <Modal
           title={`Create Ad · ${adBuilder.phone.model}`}
@@ -1534,7 +1703,22 @@ export default function Home() {
             <div className="ad-builder-meta">
               <span>{adBuilder.platform}</span>
               <span>{adBuilder.text.length} characters</span>
+              <span>{adBuilder.photos?.length || 0} photo(s)</span>
             </div>
+            {(adBuilder.photos?.length || 0) > 0 && (
+              <div className="ad-photo-strip">
+                {adBuilder.photos.map((photo) => (
+                  <button
+                    type="button"
+                    key={photo.id}
+                    title="Open photo"
+                    onClick={() => window.open(photo.dataUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <img src={photo.dataUrl} alt={adBuilder.phone.model + " ad photo"} />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="actions ad-builder-actions">
               <button type="button" onClick={() => setAdBuilder(null)}>
                 Close
@@ -1542,9 +1726,14 @@ export default function Home() {
               <button type="button" onClick={() => saveAdRecord("Draft")}>
                 Save Draft
               </button>
-              <button type="button" onClick={() => saveAdRecord("Published")}>
-                Mark Published
+              <button type="button" onClick={publishAdToPlatform}>
+                Open {adBuilder.platform} + Mark Published
               </button>
+              {(adBuilder.photos?.length || 0) > 0 && (
+                <button type="button" onClick={shareAdWithPhotos}>
+                  Share Ad + Photos
+                </button>
+              )}
               <button
                 type="button"
                 className="primary"
