@@ -1,0 +1,36 @@
+name: Candidate Deploy Wrapper
+
+on:
+  push:
+    branches:
+      - fix/cloudflare-deploy-secrets
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build using Cloudflare command path
+        run: pnpm run build
+      - name: Verify OpenNext artifact and wrapper
+        run: |
+          test -f .open-next/worker.js
+          test -x node_modules/.bin/wrangler
+          npx wrangler --version
+      - name: Exercise secret-file deploy wrapper without publishing
+        env:
+          TRADERA_APP_ID: candidate-test-id
+          TRADERA_APP_KEY: candidate-test-key
+        run: |
+          npx wrangler deploy --dry-run --outdir /tmp/wrangler-dry-run
+          test -d /tmp/wrangler-dry-run
