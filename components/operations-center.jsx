@@ -104,25 +104,170 @@ async function compressImage(file) {
   return canvas.toDataURL("image/jpeg", 0.78);
 }
 
-async function scanImeiFile(file) {
-  if (!("BarcodeDetector" in window)) {
-    throw new Error("Barcode scan is not supported by this browser. Enter the IMEI manually.");
-  }
-  const detector = new window.BarcodeDetector({
-    formats: ["code_128", "code_39", "ean_13", "qr_code", "data_matrix"],
-  });
+async function preprocessScanImage(file) {
   const bitmap = await createImageBitmap(file);
   try {
-    const codes = await detector.detect(bitmap);
-    for (const code of codes) {
-      const digits = String(code.rawValue || "").replace(/\D/g, "");
-      const match = digits.match(/\d{15}/);
-      if (match) return match[0];
+    const max = 1800;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = image.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      const boosted = gray > 185 ? 255 : gray < 75 ? 0 : Math.min(255, Math.max(0, (gray - 128) * 1.75 + 128));
+      d[i] = d[i + 1] = d[i + 2] = boosted;
     }
+    ctx.putImageData(image, 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.92);
   } finally {
     bitmap.close?.();
   }
-  throw new Error("No 15-digit IMEI barcode was found. Try a clearer photo of the box label.");
+}
+
+async function decodeBarcodeFile(file) {
+  if ("BarcodeDetector" in window) {
+    try {
+      const detector = new window.BarcodeDetector({
+        formats: ["code_128", "code_39", "ean_13", "qr_code", "data_matrix"],
+      });
+      const bitmap = await createImageBitmap(file);
+      try {
+        const codes = await detector.detect(bitmap);
+        if (codes?.length) return String(codes[0].rawValue || "").trim();
+      } finally {
+        bitmap.close?.();
+      }
+    } catch {}
+  }
+
+  try {
+    const { BrowserMultiFormatReader } = await import("@zxing/browser");
+    const reader = new BrowserMultiFormatReader();
+    const url = URL.createObjectURL(file);
+    try {
+      const result = await reader.decodeFromImageUrl(url);
+      const raw = result?.getText?.() || result?.text || "";
+      if (raw) return String(raw).trim();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch {}
+
+  return "";
+}
+
+async function scanDeviceFile(file, onProgress) {
+  onProgress?.("Looking for QR / barcode…");
+  const code = await decodeBarcodeFile(file);
+  if (code) return { raw: code, method: "barcode" };
+
+  onProgress?.("No barcode found. Reading printed IMEI digits…");
+  const processed = await preprocessScanImage(file);
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("eng");
+  try {
+    await worker.setParameters({
+      tessedit_char_whitelist: "0123456789",
+      preserve_interword_spaces: "1",
+    });
+    const result = await worker.recognize(processed);
+    const text = result?.data?.text || "";
+    const imei = extractImeiFromText(text);
+    if (imei) return { raw: imei, imei, method: "ocr", text };
+  } finally {
+    await worker.terminate();
+  }
+
+  throw new Error(
+    "Could not read an IMEI. Fill the frame with the 15-digit IMEI, keep the phone steady, avoid glare, and try again.",
+  );
+}
+
+async function scanImeiFile(file, onProgress) {
+  const result = await scanDeviceFile(file, onProgress);
+  const parsed = parseDeviceCode(result.raw);
+  const imei = parsed.imei || result.imei || extractImeiFromText(result.raw);
+  if (!imei) {
+    throw new Error("A code was found, but it did not contain a 15-digit IMEI.");
+  }
+  return { imei, method: result.method, raw: result.raw };
+}
+
+async function generateDeviceImages(phone) {
+  const [{ default: QRCode }, { default: JsBarcode }] = await Promise.all([
+    import("qrcode"),
+    import("jsbarcode"),
+  ]);
+  const payload = deviceCodePayload(phone);
+  const qr = await QRCode.toDataURL(payload, {
+    width: 420,
+    margin: 1,
+    errorCorrectionLevel: "M",
+  });
+
+  const barcodeCanvas = document.createElement("canvas");
+  const barcodeValue =
+    String(phone?.imei || "").replace(/\D/g, "") ||
+    ("ID" + String(phone?.id || "").replace(/[^A-Za-z0-9]/g, "")).slice(0, 40);
+  JsBarcode(barcodeCanvas, barcodeValue, {
+    format: "CODE128",
+    displayValue: true,
+    fontSize: 18,
+    height: 68,
+    margin: 8,
+  });
+  return {
+    payload,
+    qr,
+    barcode: barcodeCanvas.toDataURL("image/png"),
+    barcodeValue,
+  };
+}
+
+async function printDeviceLabel(phone) {
+  const popup = window.open("", "_blank");
+  if (!popup) throw new Error("Allow pop-ups to print the device label.");
+  popup.document.write("<p style='font-family:system-ui;padding:24px'>Preparing label…</p>");
+  const images = await generateDeviceImages(phone);
+  const title = [phone.model, phone.storage_gb ? phone.storage_gb + "GB" : ""]
+    .filter(Boolean)
+    .join(" ");
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+<html>
+<head>
+  <title>${title} · Lager iPhone</title>
+  <style>
+    @page { size: 62mm 40mm; margin: 2mm; }
+    body { margin:0; font-family:Arial,sans-serif; color:#111; }
+    .label { width:58mm; min-height:36mm; display:grid; grid-template-columns:1fr 22mm; gap:2mm; align-items:center; }
+    h1 { font-size:12pt; margin:0 0 2mm; }
+    p { font-size:7.5pt; margin:1mm 0; }
+    .barcode { width:34mm; max-height:14mm; object-fit:contain; }
+    .qr { width:21mm; height:21mm; }
+    .muted { color:#555; font-size:6.5pt; }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <div>
+      <h1>${title}</h1>
+      <p>IMEI: ${phone.imei || "Not recorded"}</p>
+      <p>${phone.color || ""} ${phone.grade ? "· Grade " + phone.grade : ""}</p>
+      <img class="barcode" src="${images.barcode}" alt="Barcode">
+      <p class="muted">Scan in Lager iPhone to open this device.</p>
+    </div>
+    <img class="qr" src="${images.qr}" alt="QR code">
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),150)</script>
+</body>
+</html>`);
+  popup.document.close();
 }
 
 function nowId(prefix) {
