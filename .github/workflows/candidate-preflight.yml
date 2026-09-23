@@ -1,0 +1,30 @@
+name: Candidate Config Preflight
+
+on:
+  push:
+    branches:
+      - fix/cloudflare-market-stable
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required configuration presence
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TRADERA_APP_ID_SECRET: ${{ secrets.TRADERA_APP_ID }}
+          GH_TRADERA_APP_KEY: ${{ secrets.TRADERA_APP_KEY }}
+          GH_SUPABASE_URL_SECRET: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          GH_SUPABASE_KEY_SECRET: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          GH_TRADERA_APP_ID_VAR: ${{ vars.TRADERA_APP_ID }}
+          GH_SUPABASE_URL_VAR: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          GH_SUPABASE_KEY_VAR: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          check() { if [ -n "$2" ]; then echo "$1=true"; else echo "$1=false"; fi; }
+          check CLOUDFLARE_API_TOKEN_present "$CF_TOKEN"
+          check CLOUDFLARE_ACCOUNT_ID_present "$CF_ACCOUNT"
+          check TRADERA_APP_ID_present "${GH_TRADERA_APP_ID_SECRET:-$GH_TRADERA_APP_ID_VAR}"
+          check TRADERA_APP_KEY_present "$GH_TRADERA_APP_KEY"
+          check NEXT_PUBLIC_SUPABASE_URL_present "${GH_SUPABASE_URL_SECRET:-$GH_SUPABASE_URL_VAR}"
+          check NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY_present "${GH_SUPABASE_KEY_SECRET:-$GH_SUPABASE_KEY_VAR}"
