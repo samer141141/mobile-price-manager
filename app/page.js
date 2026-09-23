@@ -30,6 +30,7 @@ import {
   SuggestedPricePanel,
 } from "../components/business-tools";
 import OperationsCenter from "../components/operations-center";
+import { loadPhonePhotos, photoToFile } from "../lib/phone-photos";
 const conditions = ["Excellent", "Good", "Fair", "Damaged"],
   marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
@@ -112,40 +113,6 @@ const AD_PLATFORM_URLS = {
   Tradera: "https://www.tradera.com/sell",
   TikTok: "https://www.tiktok.com/upload",
 };
-
-function openPhoneMediaDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("lager-iphone-media", 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("photos")) {
-        const store = db.createObjectStore("photos", { keyPath: "id" });
-        store.createIndex("phoneId", "phoneId");
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function loadPhonePhotos(phoneId) {
-  const db = await openPhoneMediaDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("photos", "readonly");
-    const request = tx.objectStore("photos").index("phoneId").getAll(String(phoneId));
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function dataUrlToFile(dataUrl, name) {
-  const [header, encoded] = String(dataUrl || "").split(",");
-  const mime = header?.match(/data:([^;]+)/)?.[1] || "image/jpeg";
-  const binary = atob(encoded || "");
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return new File([bytes], name, { type: mime });
-}
 
 export default function Home() {
   const router = useRouter();
@@ -352,8 +319,8 @@ export default function Home() {
 
   async function shareAdWithPhotos() {
     if (!adBuilder) return;
-    const files = (adBuilder.photos || []).map((photo, index) =>
-      dataUrlToFile(photo.dataUrl, "iphone-" + (index + 1) + ".jpg"),
+    const files = await Promise.all(
+      (adBuilder.photos || []).map((photo, index) => photoToFile(photo, index)),
     );
     try {
       if (files.length && navigator.canShare?.({ files })) {
