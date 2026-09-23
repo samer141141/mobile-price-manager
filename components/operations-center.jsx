@@ -1344,7 +1344,7 @@ export default function OperationsCenter({
                     }}
                   />
                 </div>
-                <p>Up to 6 compressed photos. Stored in this browser for quick ad preparation.</p>
+                <p>Up to 6 compressed photos. Saved to cloud storage so they are available on your other devices and ready for ads.</p>
                 <div className="photo-grid">
                   {photos.map((photo) => (
                     <figure key={photo.id}>
