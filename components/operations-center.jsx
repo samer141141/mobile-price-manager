@@ -22,6 +22,11 @@ import {
   parseDeviceCode,
 } from "../lib/device-codes.mjs";
 import { parseThreeUToolsText } from "../lib/threeutools.mjs";
+import {
+  deletePhonePhoto,
+  loadPhonePhotos,
+  savePhonePhoto,
+} from "../lib/phone-photos";
 
 const OPS_KEY = "lager-ops-v2";
 const AUDIT_KEY = "lager-audit-v2";
@@ -45,51 +50,6 @@ function downloadJson(name, value) {
   a.download = name;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function idbOpen() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("lager-iphone-media", 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("photos")) {
-        const store = db.createObjectStore("photos", { keyPath: "id" });
-        store.createIndex("phoneId", "phoneId");
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function idbPhotos(phoneId) {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("photos", "readonly");
-    const request = tx.objectStore("photos").index("phoneId").getAll(String(phoneId));
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function idbPutPhoto(photo) {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("photos", "readwrite");
-    tx.objectStore("photos").put(photo);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function idbDeletePhoto(id) {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("photos", "readwrite");
-    tx.objectStore("photos").delete(id);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
 }
 
 async function compressImage(file) {
@@ -350,7 +310,10 @@ export default function OperationsCenter({
       setPhotos([]);
       return;
     }
-    idbPhotos(selected.id).then(setPhotos).catch(() => setPhotos([]));
+    loadPhonePhotos(selected.id).then((next) => {
+      setPhotos(next);
+      onPhotoCountChange?.(selected.id, next.length);
+    }).catch(() => setPhotos([]));
     const record = readJson(OPS_KEY, {})[String(selected.id)] || {};
     setSaleForm((current) => ({
       ...current,
@@ -627,29 +590,32 @@ export default function OperationsCenter({
     try {
       if (photos.length >= 6) throw new Error("Maximum 6 photos per phone.");
       const dataUrl = await compressImage(file);
-      const photo = {
-        id: nowId("photo"),
-        phoneId: String(selected.id),
-        dataUrl,
-        createdAt: new Date().toISOString(),
-      };
-      await idbPutPhoto(photo);
-      const next = await idbPhotos(selected.id);
+      const saved = await savePhonePhoto(selected.id, dataUrl);
+      const next = await loadPhonePhotos(selected.id);
       setPhotos(next);
       onPhotoCountChange?.(selected.id, next.length);
-      logAction("Photo added", selected);
-      setNotice("Photo saved on this device.");
+      logAction("Photo added", selected, saved.cloud ? "Supabase Storage" : "Local fallback");
+      setNotice(
+        saved.cloud
+          ? "Photo saved to cloud storage and is available on your other devices."
+          : "Photo saved locally. Cloud storage is not ready yet, so it will upload automatically when available.",
+      );
     } catch (e) {
       setError(e.message);
     }
   }
 
-  async function removePhoto(id) {
-    await idbDeletePhoto(id);
-    if (selected) {
-      const next = await idbPhotos(selected.id);
-      setPhotos(next);
-      onPhotoCountChange?.(selected.id, next.length);
+  async function removePhoto(photo) {
+    try {
+      await deletePhonePhoto(photo);
+      if (selected) {
+        const next = await loadPhonePhotos(selected.id);
+        setPhotos(next);
+        onPhotoCountChange?.(selected.id, next.length);
+      }
+      setNotice("Photo deleted.");
+    } catch (e) {
+      setError(e.message);
     }
   }
 
@@ -1390,7 +1356,7 @@ export default function OperationsCenter({
                       >
                         <img src={photo.dataUrl} alt={selected.model + " inventory"} />
                       </button>
-                      <button type="button" onClick={() => removePhoto(photo.id)}>×</button>
+                      <button type="button" onClick={() => removePhoto(photo)}>×</button>
                     </figure>
                   ))}
                 </div>
