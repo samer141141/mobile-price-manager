@@ -18,7 +18,7 @@ import {
 const conditions = ["Excellent", "Good", "Fair", "Damaged"],
   marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
-  sources = ["Tradera", "Blocket", "Swappie", "Back Market", "Other"];
+  sources = ["Apple Trade In", "Elgiganten Trade-In", "Tradera", "Blocket", "Swappie", "Back Market", "PhoneHero", "Other"];
 async function rpc(name, args = {}) {
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw new Error(error.message);
@@ -668,9 +668,8 @@ export default function Home() {
                   recorded listing prices, not guaranteed sales.
                 </p>
                 <p className="notice">
-                  <strong>Tradera live market check is available.</strong>{" "}
-                  Search by model and storage below. Manual market prices remain
-                  available and live results are shown separately until saved.
+                  <strong>Multi-source purchase-price comparison.</strong>{" "}
+                  Use live sources when available and compare direct Swedish trade-in quotes from Apple and Elgiganten. Trade-in values are kept separate from resale listings.
                 </p>
                 <div className="calculator">
                   <h3>Live market check</h3>
@@ -706,7 +705,7 @@ export default function Home() {
                           setLiveMarket(body);
                           if (!body.listings?.length) {
                             const statuses = (body.sources || []).map((s) => s.source + ": " + s.status).join(" · ");
-                            throw new Error("No live market prices returned. " + statuses);
+                            setNotice("No automated listing prices returned yet. Direct trade-in comparison is still available below. " + statuses);
                           }
                         } catch (e) {
                           setLiveMarket(null);
@@ -728,6 +727,20 @@ export default function Home() {
                       }}
                     >
                       Check Blocket Nybegagnat
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!marketForm.model.trim()}
+                      onClick={() => window.open("https://www.apple.com/se/shop/trade-in", "_blank", "noopener,noreferrer")}
+                    >
+                      Apple Trade In
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!marketForm.model.trim()}
+                      onClick={() => window.open("https://www.elgiganten.se/tjanster-tillbehor/tjanster/trade-in", "_blank", "noopener,noreferrer")}
+                    >
+                      Elgiganten Trade-In
                     </button>
                   </div>
                   {liveMarket && (() => {
