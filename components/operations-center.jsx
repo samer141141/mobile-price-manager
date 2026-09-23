@@ -15,6 +15,12 @@ import {
   marketRecommendations,
   smartBuyAnalysis,
 } from "../lib/business-intelligence.mjs";
+import {
+  deviceCodePayload,
+  extractImeiFromText,
+  findPhoneFromCode,
+  parseDeviceCode,
+} from "../lib/device-codes.mjs";
 
 const OPS_KEY = "lager-ops-v2";
 const AUDIT_KEY = "lager-audit-v2";
@@ -98,25 +104,170 @@ async function compressImage(file) {
   return canvas.toDataURL("image/jpeg", 0.78);
 }
 
-async function scanImeiFile(file) {
-  if (!("BarcodeDetector" in window)) {
-    throw new Error("Barcode scan is not supported by this browser. Enter the IMEI manually.");
-  }
-  const detector = new window.BarcodeDetector({
-    formats: ["code_128", "code_39", "ean_13", "qr_code", "data_matrix"],
-  });
+async function preprocessScanImage(file) {
   const bitmap = await createImageBitmap(file);
   try {
-    const codes = await detector.detect(bitmap);
-    for (const code of codes) {
-      const digits = String(code.rawValue || "").replace(/\D/g, "");
-      const match = digits.match(/\d{15}/);
-      if (match) return match[0];
+    const max = 1800;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = image.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+      const boosted = gray > 185 ? 255 : gray < 75 ? 0 : Math.min(255, Math.max(0, (gray - 128) * 1.75 + 128));
+      d[i] = d[i + 1] = d[i + 2] = boosted;
     }
+    ctx.putImageData(image, 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.92);
   } finally {
     bitmap.close?.();
   }
-  throw new Error("No 15-digit IMEI barcode was found. Try a clearer photo of the box label.");
+}
+
+async function decodeBarcodeFile(file) {
+  if ("BarcodeDetector" in window) {
+    try {
+      const detector = new window.BarcodeDetector({
+        formats: ["code_128", "code_39", "ean_13", "qr_code", "data_matrix"],
+      });
+      const bitmap = await createImageBitmap(file);
+      try {
+        const codes = await detector.detect(bitmap);
+        if (codes?.length) return String(codes[0].rawValue || "").trim();
+      } finally {
+        bitmap.close?.();
+      }
+    } catch {}
+  }
+
+  try {
+    const { BrowserMultiFormatReader } = await import("@zxing/browser");
+    const reader = new BrowserMultiFormatReader();
+    const url = URL.createObjectURL(file);
+    try {
+      const result = await reader.decodeFromImageUrl(url);
+      const raw = result?.getText?.() || result?.text || "";
+      if (raw) return String(raw).trim();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch {}
+
+  return "";
+}
+
+async function scanDeviceFile(file, onProgress) {
+  onProgress?.("Looking for QR / barcode…");
+  const code = await decodeBarcodeFile(file);
+  if (code) return { raw: code, method: "barcode" };
+
+  onProgress?.("No barcode found. Reading printed IMEI digits…");
+  const processed = await preprocessScanImage(file);
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker("eng");
+  try {
+    await worker.setParameters({
+      tessedit_char_whitelist: "0123456789",
+      preserve_interword_spaces: "1",
+    });
+    const result = await worker.recognize(processed);
+    const text = result?.data?.text || "";
+    const imei = extractImeiFromText(text);
+    if (imei) return { raw: imei, imei, method: "ocr", text };
+  } finally {
+    await worker.terminate();
+  }
+
+  throw new Error(
+    "Could not read an IMEI. Fill the frame with the 15-digit IMEI, keep the phone steady, avoid glare, and try again.",
+  );
+}
+
+async function scanImeiFile(file, onProgress) {
+  const result = await scanDeviceFile(file, onProgress);
+  const parsed = parseDeviceCode(result.raw);
+  const imei = parsed.imei || result.imei || extractImeiFromText(result.raw);
+  if (!imei) {
+    throw new Error("A code was found, but it did not contain a 15-digit IMEI.");
+  }
+  return { imei, method: result.method, raw: result.raw };
+}
+
+async function generateDeviceImages(phone) {
+  const [{ default: QRCode }, { default: JsBarcode }] = await Promise.all([
+    import("qrcode"),
+    import("jsbarcode"),
+  ]);
+  const payload = deviceCodePayload(phone);
+  const qr = await QRCode.toDataURL(payload, {
+    width: 420,
+    margin: 1,
+    errorCorrectionLevel: "M",
+  });
+
+  const barcodeCanvas = document.createElement("canvas");
+  const barcodeValue =
+    String(phone?.imei || "").replace(/\D/g, "") ||
+    ("ID" + String(phone?.id || "").replace(/[^A-Za-z0-9]/g, "")).slice(0, 40);
+  JsBarcode(barcodeCanvas, barcodeValue, {
+    format: "CODE128",
+    displayValue: true,
+    fontSize: 18,
+    height: 68,
+    margin: 8,
+  });
+  return {
+    payload,
+    qr,
+    barcode: barcodeCanvas.toDataURL("image/png"),
+    barcodeValue,
+  };
+}
+
+async function printDeviceLabel(phone) {
+  const popup = window.open("", "_blank");
+  if (!popup) throw new Error("Allow pop-ups to print the device label.");
+  popup.document.write("<p style='font-family:system-ui;padding:24px'>Preparing label…</p>");
+  const images = await generateDeviceImages(phone);
+  const title = [phone.model, phone.storage_gb ? phone.storage_gb + "GB" : ""]
+    .filter(Boolean)
+    .join(" ");
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+<html>
+<head>
+  <title>${title} · Lager iPhone</title>
+  <style>
+    @page { size: 62mm 40mm; margin: 2mm; }
+    body { margin:0; font-family:Arial,sans-serif; color:#111; }
+    .label { width:58mm; min-height:36mm; display:grid; grid-template-columns:1fr 22mm; gap:2mm; align-items:center; }
+    h1 { font-size:12pt; margin:0 0 2mm; }
+    p { font-size:7.5pt; margin:1mm 0; }
+    .barcode { width:34mm; max-height:14mm; object-fit:contain; }
+    .qr { width:21mm; height:21mm; }
+    .muted { color:#555; font-size:6.5pt; }
+  </style>
+</head>
+<body>
+  <div class="label">
+    <div>
+      <h1>${title}</h1>
+      <p>IMEI: ${phone.imei || "Not recorded"}</p>
+      <p>${phone.color || ""} ${phone.grade ? "· Grade " + phone.grade : ""}</p>
+      <img class="barcode" src="${images.barcode}" alt="Barcode">
+      <p class="muted">Scan in Lager iPhone to open this device.</p>
+    </div>
+    <img class="qr" src="${images.qr}" alt="QR code">
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),150)</script>
+</body>
+</html>`);
+  popup.document.close();
 }
 
 function nowId(prefix) {
@@ -172,10 +323,12 @@ export default function OperationsCenter({
     price: "",
   });
   const [photos, setPhotos] = useState([]);
+  const [scanStatus, setScanStatus] = useState("");
   const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(new Date().getFullYear());
   const restoreRef = useRef(null);
   const scannerRef = useRef(null);
+  const inventoryScannerRef = useRef(null);
   const photoRef = useRef(null);
 
   useEffect(() => {
@@ -305,12 +458,48 @@ export default function OperationsCenter({
 
   async function handleImeiScan(file) {
     if (!file) return;
+    setScanStatus("Starting scan…");
     try {
-      const imei = await scanImeiFile(file);
-      setPurchase((p) => ({ ...p, imei }));
-      setNotice("IMEI scanned successfully.");
+      const result = await scanImeiFile(file, setScanStatus);
+      setPurchase((p) => ({ ...p, imei: result.imei }));
+      setNotice(
+        result.method === "ocr"
+          ? "IMEI read from printed digits."
+          : "IMEI scanned from barcode / QR.",
+      );
     } catch (e) {
       setError(e.message);
+    } finally {
+      setScanStatus("");
+    }
+  }
+
+  async function handleInventoryScan(file) {
+    if (!file) return;
+    setScanStatus("Starting scan…");
+    try {
+      const result = await scanDeviceFile(file, setScanStatus);
+      const found = findPhoneFromCode(phones, result.raw);
+      if (!found.phone) {
+        const parsed = found.parsed;
+        throw new Error(
+          parsed.imei
+            ? "IMEI was read, but this phone is not in Lager iPhone."
+            : "The scanned code is not a Lager iPhone device code.",
+        );
+      }
+      setSelected(found.phone);
+      setPanel("quick");
+      setQuery("");
+      setNotice(
+        result.method === "ocr"
+          ? "Phone opened from IMEI text."
+          : "Phone opened from barcode / QR.",
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setScanStatus("");
     }
   }
 
@@ -456,7 +645,10 @@ export default function OperationsCenter({
 
   async function generateReceipt(phone, sale) {
     try {
-      const mod = await import("jspdf");
+      const [mod, images] = await Promise.all([
+        import("jspdf"),
+        generateDeviceImages(phone),
+      ]);
       const jsPDF = mod.jsPDF || mod.default;
       const doc = new jsPDF();
       let y = 20;
@@ -487,9 +679,28 @@ export default function OperationsCenter({
         doc.text(String(value), 58, y);
         y += 8;
       }
+
       y += 5;
       doc.setFontSize(9);
-      doc.text("Generated by Lager iPhone. Add company/VAT details separately if this document is used for accounting.", 18, y, { maxWidth: 170 });
+      doc.text(
+        "Scan the QR code in Lager iPhone to open this device record.",
+        18,
+        y,
+        { maxWidth: 120 },
+      );
+      doc.addImage(images.qr, "PNG", 154, Math.max(18, y - 16), 34, 34);
+      y += 18;
+      if (phone.imei) {
+        doc.addImage(images.barcode, "PNG", 18, y, 92, 23);
+        y += 27;
+      }
+      doc.setFontSize(8);
+      doc.text(
+        "Generated by Lager iPhone. Add company/VAT details separately if this document is used for accounting.",
+        18,
+        y,
+        { maxWidth: 170 },
+      );
       doc.save("lager-iphone-receipt-" + (phone.imei || phone.id) + ".pdf");
       logAction("Receipt created", phone);
     } catch (e) {
@@ -607,6 +818,9 @@ export default function OperationsCenter({
         <div className="actions ops-hero-actions">
           <button type="button" onClick={backupAll}>Backup</button>
           <button type="button" onClick={() => restoreRef.current?.click()}>Restore</button>
+          <button type="button" className="scan-device-button" onClick={() => inventoryScannerRef.current?.click()}>
+            ▣ Scan Device
+          </button>
           <button type="button" className="primary" onClick={() => setPurchaseOpen(true)}>＋ New Purchase</button>
           <input
             ref={restoreRef}
@@ -619,8 +833,27 @@ export default function OperationsCenter({
               restoreBackup(file);
             }}
           />
+          <input
+            ref={inventoryScannerRef}
+            hidden
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              handleInventoryScan(file);
+            }}
+          />
         </div>
       </div>
+
+      {scanStatus && (
+        <div className="scan-status" role="status">
+          <span className="scan-spinner" aria-hidden="true" />
+          {scanStatus}
+        </div>
+      )}
 
       <div className="ops-search">
         <span>⌕</span>
@@ -833,8 +1066,9 @@ export default function OperationsCenter({
                   <span>IMEI</span>
                   <div className="inline-input-action">
                     <input inputMode="numeric" maxLength="15" value={purchase.imei} onChange={(e) => setPurchase({ ...purchase, imei: e.target.value.replace(/\D/g, "").slice(0, 15) })} />
-                    <button type="button" onClick={() => scannerRef.current?.click()}>Scan</button>
+                    <button type="button" onClick={() => scannerRef.current?.click()}>Scan IMEI</button>
                   </div>
+                  <small className="scan-help">Works with a barcode/QR or the 15 printed IMEI digits shown on another phone.</small>
                   <input
                     ref={scannerRef}
                     hidden
@@ -953,6 +1187,19 @@ export default function OperationsCenter({
               <button type="button" className={panel === "photos" ? "active" : ""} onClick={() => setPanel("photos")}>▣ Photos</button>
               <button type="button" onClick={() => onOpenAd(selected)}>✦ Create Ad</button>
               <button type="button" onClick={() => onOpenDeal(selected)}>↗ Price</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await printDeviceLabel(selected);
+                    logAction("Device label printed", selected);
+                  } catch (e) {
+                    setError(e.message);
+                  }
+                }}
+              >
+                ▦ Label
+              </button>
               <button type="button" className={panel === "sale" ? "active" : ""} onClick={() => setPanel("sale")}>$ Sell</button>
               {String(selected.status).toLowerCase() === "sold" && (
                 <button type="button" className={panel === "receipt" ? "active" : ""} onClick={() => setPanel("receipt")}>Receipt</button>
@@ -969,6 +1216,19 @@ export default function OperationsCenter({
                   <button type="button" onClick={markReady}>Mark Ready</button>
                   <button type="button" onClick={markListed}>Mark Listed</button>
                   <button type="button" onClick={() => onOpenAd(selected)}>Relist</button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await printDeviceLabel(selected);
+                        logAction("Device label printed", selected);
+                      } catch (e) {
+                        setError(e.message);
+                      }
+                    }}
+                  >
+                    Print Barcode Label
+                  </button>
                 </div>
               </div>
             )}
