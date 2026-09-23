@@ -22,11 +22,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Build Next.js and OpenNext worker
-        run: pnpm run build
+        run: pnpm exec opennextjs-cloudflare build
       - name: Verify worker artifact
         run: test -f .open-next/worker.js
       - name: Deploy to Cloudflare Workers
-        run: npx --yes wrangler@4.37.1 deploy
+        run: pnpm exec opennextjs-cloudflare deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
