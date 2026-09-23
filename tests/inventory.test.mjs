@@ -92,14 +92,16 @@ test("market estimates match model/storage/condition and honor configurable perc
     { ...phone, storage_gb: 256, market_price: 5000 },
     { ...phone, condition: "Fair", market_price: 4000 },
   ];
-  assert.deepEqual(marketStats(records, phone, 80, 100), {
-    count: 2,
-    average: 1500,
-    min: 1000,
-    max: 2000,
-    buy: 1200,
-    expected: 200,
-  });
+  const result = marketStats(records, phone, 80, 100);
+  assert.equal(result.count, 2);
+  assert.equal(result.average, 1500);
+  assert.equal(result.median, 1500);
+  assert.equal(result.min, 1000);
+  assert.equal(result.max, 2000);
+  assert.equal(result.buy, 1200);
+  assert.equal(result.expected, 200);
+  assert.equal(result.rawCount, 2);
+  assert.equal(result.removedOutliers, 0);
   assert.equal(marketStats(records, { ...phone, model: "other" }, 80), null);
   assert.equal(marketStats(records, phone, 0).buy, 0);
 });

@@ -1458,3 +1458,445 @@ footer {
     grid-column: auto;
   }
 }
+
+
+/* Business intelligence suite */
+.intelligence-panel,
+.ad-center-panel {
+  position: relative;
+  overflow: hidden;
+}
+.intelligence-panel::before,
+.ad-center-panel::before {
+  content: "";
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  top: -190px;
+  right: -110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(38,118,91,.13), rgba(38,118,91,0) 70%);
+  pointer-events: none;
+}
+.intelligence-panel > *,
+.ad-center-panel > * {
+  position: relative;
+  z-index: 1;
+}
+.intelligence-title {
+  align-items: center;
+}
+.insight-chip,
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #d7e6df;
+  border-radius: 999px;
+  background: #f7fbf9;
+  color: #49695f;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+.intelligence-cards,
+.smart-buy-results,
+.suggested-price-cards,
+.deal-calculator-cards {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 11px;
+}
+.mini-kpi {
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid #dfeae5;
+  border-radius: 15px;
+  background: linear-gradient(180deg,#fff,#f8fbf9);
+  box-shadow: 0 8px 22px rgba(14,61,50,.045);
+}
+.mini-kpi > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #71847d;
+  font-size: 11px;
+  font-weight: 750;
+}
+.mini-kpi strong {
+  display: block;
+  color: #123a30;
+  font-size: 22px;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+}
+.mini-kpi small {
+  display: block;
+  margin-top: 7px;
+  color: #84918c;
+  font-size: 11px;
+}
+
+.aging-section {
+  margin-top: 24px;
+}
+.subheading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.subheading-row h3 {
+  margin: 0;
+}
+.subheading-row p {
+  margin: 0;
+  font-size: 12px;
+}
+.aging-list {
+  display: grid;
+  gap: 8px;
+}
+.aging-row {
+  display: grid;
+  grid-template-columns: minmax(180px,1.3fr) minmax(110px,.65fr) minmax(180px,1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 13px 14px;
+  border: 1px solid #e0ebe6;
+  border-radius: 13px;
+  background: #fbfdfc;
+}
+.aging-row > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.aging-row > div:first-child span {
+  color: #7d8c87;
+  font-size: 11px;
+}
+.aging-badge {
+  justify-self: start;
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.aging-badge.fresh { background: #e8f6ef; color: #247251; }
+.aging-badge.watch { background: #fff5dc; color: #87621e; }
+.aging-badge.slow { background: #fff0e6; color: #a85c2f; }
+.aging-badge.action { background: #fdebea; color: #a64141; }
+.aging-badge.unknown { background: #eef1f3; color: #65727a; }
+.aging-action {
+  color: #60766e;
+  font-size: 12px;
+}
+
+.smart-buy-card,
+.suggested-prices,
+.price-history-card {
+  margin: 18px 0;
+  padding: 19px;
+  border: 1px solid #dfeae5;
+  border-radius: 17px;
+  background: linear-gradient(145deg,#fbfdfc,#f2f7f4);
+}
+.smart-buy-inputs {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+}
+.deal-decision {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+.deal-decision.good { background: #dcf4e8; color: #176747; }
+.deal-decision.tight { background: #fff2d8; color: #845d13; }
+.deal-decision.avoid { background: #fde7e5; color: #9e3e3a; }
+.deal-decision.neutral { background: #eef2f0; color: #5f7069; }
+.smart-buy-note {
+  margin: 11px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff6e3;
+  color: #7b5b20;
+  font-size: 12px;
+}
+.suggested-price-cards .mini-kpi:nth-child(2) {
+  border-color: #b9d8cb;
+  box-shadow: 0 10px 24px rgba(31,105,80,.08);
+}
+.suggested-price-cards .mini-kpi:nth-child(2) strong {
+  color: #0f5a42;
+}
+
+.range-switcher {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #dce8e2;
+  border-radius: 11px;
+  background: #fff;
+}
+.range-switcher button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #6b7d76;
+  font-size: 10px;
+  font-weight: 800;
+}
+.range-switcher button.active {
+  background: #133f35 !important;
+  color: #fff;
+}
+.history-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 5px 0 10px;
+}
+.history-summary strong {
+  color: #123a30;
+  font-size: 25px;
+}
+.history-summary span {
+  color: #7a8b85;
+  font-size: 11px;
+  font-weight: 700;
+}
+.history-summary .positive { color: #25805d; }
+.history-summary .negative { color: #b14f4b; }
+.price-chart {
+  position: relative;
+  height: 170px;
+  padding: 12px 6px 24px;
+  border: 1px solid #e0ebe5;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(to bottom,#f9fbfa 0,#f9fbfa 32px,#e9f0ed 33px);
+  color: #21785b;
+}
+.price-chart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.history-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+.history-area {
+  fill: url(#historyFill);
+  stroke: none;
+}
+.chart-labels {
+  position: absolute;
+  inset: auto 8px 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  color: #84918c;
+  font-size: 10px;
+}
+.history-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.history-points span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #edf4f1;
+  color: #5b736a;
+  font-size: 10px;
+}
+.history-empty {
+  margin: 6px 0 0;
+}
+
+.deal-button {
+  border-color: #d7c7e4;
+  background: #f6f0fa !important;
+  color: #724f8b !important;
+  font-weight: 800;
+}
+.deal-button:hover:not(:disabled) {
+  background: #eee3f5 !important;
+}
+.deal-calculator-content {
+  display: grid;
+  gap: 16px;
+}
+.deal-strategy-row {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 9px;
+}
+.deal-strategy-row > div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid #e0e9e5;
+  border-radius: 13px;
+  background: #f9fbfa;
+}
+.deal-strategy-row span {
+  color: #72847d;
+  font-size: 10px;
+  font-weight: 750;
+}
+.deal-strategy-row strong {
+  color: #143d33;
+  font-size: 18px;
+}
+
+.ad-record-list {
+  display: grid;
+  gap: 9px;
+}
+.ad-record {
+  display: grid;
+  grid-template-columns: minmax(170px,1fr) auto minmax(280px,auto);
+  gap: 12px;
+  align-items: center;
+  padding: 13px 14px;
+  border: 1px solid #dfeae5;
+  border-radius: 13px;
+  background: #fbfdfc;
+}
+.ad-record-main {
+  display: grid;
+  gap: 4px;
+}
+.ad-record-main span {
+  color: #7a8984;
+  font-size: 11px;
+}
+.ad-status {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #eef3f1;
+  color: #5d7069;
+  font-size: 10px;
+  font-weight: 800;
+}
+.ad-status.published {
+  background: #e2f4ea;
+  color: #247252;
+}
+.ad-status.draft {
+  background: #fff3dc;
+  color: #896420;
+}
+.ad-builder-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .intelligence-cards,
+  .smart-buy-results,
+  .suggested-price-cards,
+  .deal-calculator-cards {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  .aging-row {
+    grid-template-columns: 1fr auto;
+  }
+  .aging-action {
+    grid-column: 1 / 2;
+  }
+  .aging-row button {
+    grid-column: 2 / 3;
+  }
+  .ad-record {
+    grid-template-columns: 1fr auto;
+  }
+  .ad-record .actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .intelligence-panel,
+  .ad-center-panel {
+    padding: 14px 11px;
+  }
+  .intelligence-title,
+  .subheading-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .intelligence-cards,
+  .smart-buy-results,
+  .suggested-price-cards,
+  .deal-calculator-cards {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  .mini-kpi {
+    padding: 13px 11px;
+  }
+  .mini-kpi strong {
+    font-size: 17px;
+  }
+  .smart-buy-card,
+  .suggested-prices,
+  .price-history-card {
+    padding: 13px 11px;
+    border-radius: 14px;
+  }
+  .smart-buy-inputs {
+    grid-template-columns: 1fr;
+  }
+  .range-switcher {
+    align-self: stretch;
+    width: 100%;
+  }
+  .range-switcher button {
+    flex: 1 1 0;
+  }
+  .price-chart {
+    height: 145px;
+  }
+  .aging-row {
+    grid-template-columns: 1fr;
+  }
+  .aging-row button,
+  .aging-action {
+    grid-column: auto;
+  }
+  .aging-row button {
+    width: 100%;
+  }
+  .ad-record {
+    grid-template-columns: 1fr;
+  }
+  .ad-record .actions {
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .ad-record .actions .danger {
+    grid-column: 1 / -1;
+  }
+  .deal-strategy-row {
+    grid-template-columns: 1fr;
+  }
+  .ad-builder-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+  }
+  .ad-builder-actions button {
+    width: 100%;
+  }
+}

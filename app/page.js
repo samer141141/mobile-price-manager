@@ -15,6 +15,20 @@ import {
   payload,
   editPayload,
 } from "../lib/inventory.mjs";
+import {
+  businessInsights,
+  historyFor,
+  marketRecommendations,
+  smartBuyAnalysis,
+} from "../lib/business-intelligence.mjs";
+import {
+  AdCenterPanel,
+  DealCalculatorContent,
+  InsightsPanel,
+  PriceHistoryPanel,
+  SmartBuyPanel,
+  SuggestedPricePanel,
+} from "../components/business-tools";
 const conditions = ["Excellent", "Good", "Fair", "Damaged"],
   marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
@@ -132,6 +146,10 @@ export default function Home() {
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
     [adBuilder, setAdBuilder] = useState(null),
+    [priceHistory, setPriceHistory] = useState([]),
+    [historyRange, setHistoryRange] = useState(30),
+    [adRecords, setAdRecords] = useState([]),
+    [dealCalculator, setDealCalculator] = useState(null),
     [members, setMembers] = useState([]),
     [member, setMember] = useState({
       email: "",
@@ -180,6 +198,16 @@ export default function Home() {
     const saved = localStorage.getItem("lager-buy-percentage");
     if (saved !== null && Number(saved) >= 0 && Number(saved) <= 100)
       setPercentage(Number(saved));
+    try {
+      setPriceHistory(JSON.parse(localStorage.getItem("lager-price-history") || "[]"));
+    } catch {
+      setPriceHistory([]);
+    }
+    try {
+      setAdRecords(JSON.parse(localStorage.getItem("lager-ad-center") || "[]"));
+    } catch {
+      setAdRecords([]);
+    }
     return () => {
       live = false;
       subscription.unsubscribe();
@@ -197,6 +225,67 @@ export default function Home() {
       setError(e.message);
     } finally {
       setBusy(false);
+    }
+  }
+  function persistPriceHistory(next) {
+    const trimmed = next.slice(-500);
+    setPriceHistory(trimmed);
+    localStorage.setItem("lager-price-history", JSON.stringify(trimmed));
+  }
+  function persistAdRecords(next) {
+    const trimmed = next.slice(0, 250);
+    setAdRecords(trimmed);
+    localStorage.setItem("lager-ad-center", JSON.stringify(trimmed));
+  }
+  function saveAdRecord(status = "Draft") {
+    if (!adBuilder) return;
+    const record = {
+      id: Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+      phoneId: String(adBuilder.phone.id ?? ""),
+      model: adBuilder.phone.model,
+      storage_gb: adBuilder.phone.storage_gb,
+      platform: adBuilder.platform,
+      text: adBuilder.text,
+      status,
+      createdAt: new Date().toISOString(),
+    };
+    persistAdRecords([record, ...adRecords]);
+    setNotice(status === "Published" ? "Ad marked as published." : "Ad saved to Ad Center.");
+  }
+  function updateAdRecordStatus(id, status) {
+    persistAdRecords(
+      adRecords.map((record) => (record.id === id ? { ...record, status } : record)),
+    );
+  }
+  function deleteAdRecord(id) {
+    persistAdRecords(adRecords.filter((record) => record.id !== id));
+  }
+  async function openDealCalculator(phone) {
+    setDealCalculator({ phone, loading: true, error: "", analysis: null });
+    try {
+      const params = new URLSearchParams({
+        model: phone.model || "",
+        storage: String(phone.storage_gb || ""),
+      });
+      const response = await fetch("/api/market/compare?" + params.toString(), {
+        cache: "no-store",
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body?.error || "Market comparison failed.");
+      setDealCalculator({
+        phone,
+        loading: false,
+        error: "",
+        analysis: marketRecommendations(body.market_summary),
+        market: body,
+      });
+    } catch (e) {
+      setDealCalculator({
+        phone,
+        loading: false,
+        error: e.message,
+        analysis: null,
+      });
     }
   }
   const business = phones.filter(
@@ -230,6 +319,21 @@ export default function Home() {
       marketForm,
       Number(percentage),
       Number(expenses),
+    );
+  const insights = businessInsights(phones, saleHistory),
+    recommendations = marketRecommendations(liveMarket?.market_summary),
+    smartBuy = smartBuyAnalysis({
+      summary: liveMarket?.market_summary,
+      askingPrice: dealPrice,
+      expenses,
+      buyPercentage: percentage,
+      batteryHealth: dealBattery,
+    }),
+    historyPoints = historyFor(
+      priceHistory,
+      marketForm.model,
+      marketForm.storage_gb,
+      historyRange,
     );
   async function readImportFile(file) {
     setError("");
@@ -434,6 +538,8 @@ export default function Home() {
                 ["sold", "Sold Phones"],
                 ["samer", "Samer"],
                 ["market", "Market Prices"],
+                ...(financial ? [["insights", "Insights"]] : []),
+                ["ads", "Ad Center"],
                 ...(access.role === "admin"
                   ? [["team", "Team Permissions"]]
                   : []),
@@ -650,7 +756,16 @@ export default function Home() {
                           >
                             Create Ad
                           </button>
-                        )}                        <button
+                        )}
+                        {financial && !isSold(p) && (
+                          <button
+                            className="deal-button"
+                            onClick={() => openDealCalculator(p)}
+                          >
+                            Deal
+                          </button>
+                        )}
+                        <button
                           disabled={busy}
                           onClick={() =>
                             setEditor({
@@ -780,6 +895,33 @@ export default function Home() {
                           const body = await response.json();
                           if (!response.ok) throw new Error(body?.error || "Market comparison failed.");
                           setLiveMarket(body);
+                          const summary = body.market_summary;
+                          if (summary?.typical_price) {
+                            const snapshot = {
+                              id: Date.now(),
+                              model: marketForm.model.trim(),
+                              storage_gb: Number(marketForm.storage_gb || 0),
+                              price: Number(summary.typical_price),
+                              min: Number(summary.min_price || summary.typical_price),
+                              max: Number(summary.max_price || summary.typical_price),
+                              sample_count: Number(summary.sample_count || body.listings?.length || 0),
+                              confidence:
+                                (body.sources || []).find((s) => s.source === "Tradera")?.confidence ||
+                                "unknown",
+                              at: new Date().toISOString(),
+                            };
+                            persistPriceHistory([...priceHistory, snapshot]);
+                            rpc("lager_add_market", {
+                              payload: {
+                                model: snapshot.model,
+                                storage_gb: snapshot.storage_gb,
+                                condition: marketForm.condition || "Good",
+                                source: "Tradera",
+                                market_price: snapshot.price,
+                                listing_url: "https://www.tradera.com/category/340186",
+                              },
+                            }).catch(() => {});
+                          }
                           if (!body.listings?.length && !body.trade_in_offers?.length) {
                             const statuses = (body.sources || []).map((s) => s.source + ": " + s.status).join(" · ");
                             setNotice("Live prices are not available from the connected sources yet. You can still open the direct trade-in calculators. " + statuses);
@@ -872,29 +1014,24 @@ export default function Home() {
                     );
                   })()}
                 </div>
-                <div className="calculator">
-                  <h3>Should I Buy?</h3>
-                  <p>Enter the seller's asking price. The decision uses the latest live resale reference, your estimated costs and battery health.</p>
-                  <div className="grid">
-                    <Field label="Seller asking price (SEK)" type="number" min="0" value={dealPrice} onChange={setDealPrice} />
-                    <Field label="Battery health (%)" type="number" min="0" max="100" value={dealBattery} onChange={setDealBattery} />
-                  </div>
-                  {(() => {
-                    const vals=(liveMarket?.listings||[]).map(x=>Number(x.price)).filter(n=>n>0).sort((a,b)=>a-b);
-                    if(!vals.length || !Number(dealPrice)) return <p className="empty">Run Check Live Market and enter the seller price to evaluate the deal.</p>;
-                    const mid=Number(liveMarket?.market_summary?.typical_price) || (vals.length%2?vals[Math.floor(vals.length/2)]:(vals[vals.length/2-1]+vals[vals.length/2])/2);
-                    const batteryPenalty=Number(dealBattery)<80?700:Number(dealBattery)<85?350:0;
-                    const net=mid-Number(dealPrice)-Number(expenses||0)-batteryPenalty;
-                    const margin=mid?net/mid:0;
-                    const verdict=margin>=0.22?"Great Deal":margin>=0.12?"OK":"Too Expensive";
-                    return <div className="cards">
-                      <Card title="Decision" value={verdict} detail={"Estimated margin "+Math.round(margin*100)+"%"} />
-                      <Card title="Market Resale" value={money(mid)} />
-                      <Card title="Total Cost" value={money(Number(dealPrice)+Number(expenses||0)+batteryPenalty)} detail={batteryPenalty?"Includes battery risk allowance":"No battery allowance"} />
-                      {financial && <Card title="Expected Profit" value={money(net)} />}
-                    </div>;
-                  })()}
-                </div>
+                <SuggestedPricePanel
+                  recommendations={recommendations}
+                  confidence={(liveMarket?.sources || []).find((s) => s.source === "Tradera")?.confidence}
+                />
+                <SmartBuyPanel
+                  analysis={smartBuy}
+                  dealPrice={dealPrice}
+                  setDealPrice={setDealPrice}
+                  dealBattery={dealBattery}
+                  setDealBattery={setDealBattery}
+                  expenses={expenses}
+                  setExpenses={setExpenses}
+                />
+                <PriceHistoryPanel
+                  points={historyPoints}
+                  range={historyRange}
+                  setRange={setHistoryRange}
+                />
                 <div className="calculator">
                   <h3>Competitor Buy Offers</h3>
                   <p>
@@ -1076,6 +1213,29 @@ export default function Home() {
                   </table>
                 </div>
               </section>
+            )}
+            {tab === "insights" && financial && (
+              <InsightsPanel insights={insights} onDeal={openDealCalculator} />
+            )}
+            {tab === "ads" && (
+              <AdCenterPanel
+                records={adRecords}
+                onReopen={(record) => {
+                  const phone =
+                    phones.find((p) => String(p.id) === String(record.phoneId)) || {
+                      id: record.phoneId,
+                      model: record.model,
+                      storage_gb: record.storage_gb,
+                    };
+                  setAdBuilder({
+                    phone,
+                    platform: record.platform,
+                    text: record.text,
+                  });
+                }}
+                onStatus={updateAdRecordStatus}
+                onDelete={deleteAdRecord}
+              />
             )}
             {tab === "team" && access.role === "admin" && (
               <section className="panel">
@@ -1335,6 +1495,12 @@ export default function Home() {
               <button type="button" onClick={() => setAdBuilder(null)}>
                 Close
               </button>
+              <button type="button" onClick={() => saveAdRecord("Draft")}>
+                Save Draft
+              </button>
+              <button type="button" onClick={() => saveAdRecord("Published")}>
+                Mark Published
+              </button>
               <button
                 type="button"
                 className="primary"
@@ -1351,6 +1517,15 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+      {dealCalculator && (
+        <Modal
+          title={`Deal Calculator · ${dealCalculator.phone.model}`}
+          onClose={() => setDealCalculator(null)}
+          error=""
+        >
+          <DealCalculatorContent state={dealCalculator} />
         </Modal>
       )}
       {details && (
