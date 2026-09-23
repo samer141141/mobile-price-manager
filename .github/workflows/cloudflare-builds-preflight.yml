@@ -1,0 +1,21 @@
+name: Cloudflare Builds API Preflight
+
+on:
+  push:
+    branches:
+      - fix/cloudflare-market-stable
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Builds API access
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          code=$(curl -sS -o /tmp/triggers.json -w "%{http_code}"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/builds/triggers"             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          echo "builds_api_http=$code"
+          if [ "$code" = "200" ]; then
+            jq -r '.result[]? | "trigger_uuid=" + (.uuid // .id // "")' /tmp/triggers.json
+          fi
