@@ -1,0 +1,28 @@
+name: Cloudflare Production Smoke Check
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify site and market configuration
+        run: |
+          for i in $(seq 1 24); do
+            root_code=$(curl -L -sS -o /tmp/root.html -w "%{http_code}" --max-time 20 "https://lager-iphone.samerabouamra.workers.dev/" || true)
+            compare_code=$(curl -L -sS -o /tmp/compare.json -w "%{http_code}" --max-time 25 "https://lager-iphone.samerabouamra.workers.dev/api/market/compare?model=iPhone%2014&storage=128" || true)
+            tradera_status=$(jq -r '.sources[]? | select(.source=="Tradera") | .status' /tmp/compare.json 2>/dev/null | head -1 || true)
+            tradera_count=$(jq -r '.sources[]? | select(.source=="Tradera") | .count' /tmp/compare.json 2>/dev/null | head -1 || true)
+            echo "attempt=$i root_http=$root_code compare_http=$compare_code tradera_status=${tradera_status:-unknown} tradera_count=${tradera_count:-unknown}"
+
+            if [ "$root_code" = "200" ] && [ "$compare_code" = "200" ] && [ -n "$tradera_status" ] && [ "$tradera_status" != "not_configured" ]; then
+              echo "Production smoke check passed."
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
