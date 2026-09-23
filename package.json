@@ -21,7 +21,11 @@
     "react-dom": "^19.2.0",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.0",
-    "jspdf-autotable": "^5.0.2"
+    "jspdf-autotable": "^5.0.2",
+    "@zxing/browser": "^0.2.1",
+    "tesseract.js": "^7.0.0",
+    "qrcode": "^1.5.4",
+    "jsbarcode": "^3.12.3"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
