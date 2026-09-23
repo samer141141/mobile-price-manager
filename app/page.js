@@ -710,9 +710,11 @@ export default function Home() {
                           const body = await response.json();
                           if (!response.ok) throw new Error(body?.error || "Market comparison failed.");
                           setLiveMarket(body);
-                          if (!body.listings?.length) {
+                          if (!body.listings?.length && !body.trade_in_offers?.length) {
                             const statuses = (body.sources || []).map((s) => s.source + ": " + s.status).join(" · ");
-                            setNotice("No automated listing prices returned yet. Direct trade-in comparison is still available below. " + statuses);
+                            setNotice("Live prices are not available from the connected sources yet. You can still open the direct trade-in calculators. " + statuses);
+                          } else {
+                            setNotice("Market check completed.");
                           }
                         } catch (e) {
                           setLiveMarket(null);
@@ -841,6 +843,15 @@ export default function Home() {
                           <Card title="Resale Reference" value={resaleTypical == null ? "—" : money(resaleTypical)} detail="Live listing median; kept separate from trade-in offers" />
                           {financial && <Card title="Projected Profit" value={projected == null ? "—" : money(projected)} detail="Resale reference − customer offer − costs" />}
                         </div>
+                        {(liveMarket?.trade_in_links || []).length > 0 && (
+                          <div className="actions">
+                            {(liveMarket.trade_in_links || []).map((o) => (
+                              <button key={o.source} type="button" onClick={() => window.open(o.url, "_blank", "noopener,noreferrer")}>
+                                Open {o.source} calculator
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {autoOffers.length > 0 && (
                           <div className="table">
                             <table>
