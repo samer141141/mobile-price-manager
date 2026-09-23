@@ -1,4 +1,4 @@
-name: Cloudflare Deploy
+name: Cloudflare Emergency Rollback
 
 on:
   workflow_dispatch:
@@ -7,53 +7,12 @@ on:
       - main
 
 jobs:
-  deploy:
+  rollback:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.15.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-      - name: Build Next.js and OpenNext worker
-        run: pnpm exec opennextjs-cloudflare build
-      - name: Verify worker artifact
-        run: test -f .open-next/worker.js
-      - name: Deploy to Cloudflare Workers
-        run: pnpm exec opennextjs-cloudflare deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Inspect runtime binding names
-        run: |
-          curl -fsS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/lager-iphone/settings" \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" > /tmp/worker-settings.json
-          jq -r '
-            [.result.bindings[]?.name] as $n |
-            "TRADERA_APP_ID_present=" + (($n | index("TRADERA_APP_ID")) != null | tostring) + "\n" +
-            "TRADERA_APP_KEY_present=" + (($n | index("TRADERA_APP_KEY")) != null | tostring) + "\n" +
-            "NEXT_PUBLIC_SUPABASE_URL_present=" + (($n | index("NEXT_PUBLIC_SUPABASE_URL")) != null | tostring) + "\n" +
-            "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY_present=" + (($n | index("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")) != null | tostring)
-          ' /tmp/worker-settings.json
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Inspect recent version bindings
-        run: |
-          curl -fsS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/lager-iphone/versions?per_page=12" \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" > /tmp/versions.json
-          jq -r '.result.items[] | [.id, (.number|tostring), (.metadata.created_on // "")] | @tsv' /tmp/versions.json | while IFS=$'\t' read -r vid vnum vdate; do
-            curl -fsS "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/lager-iphone/versions/$vid" \
-              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" > /tmp/version.json
-            names=$(jq -r '[.result.resources.bindings[]?.name] | join(",")' /tmp/version.json)
-            echo "version=$vnum id=$vid created=$vdate bindings=$names"
-          done
+      - name: Restore last known working Worker version
+        run: npx --yes wrangler@4.37.1 versions deploy 56f20d84-81eb-4261-a2d7-45063c69bc4d@100% -y --name lager-iphone
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
