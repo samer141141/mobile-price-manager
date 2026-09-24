@@ -219,6 +219,13 @@ async function printDeviceLabel(phone) {
     .barcode { width:34mm; max-height:14mm; object-fit:contain; }
     .qr { width:21mm; height:21mm; }
     .muted { color:#555; font-size:6.5pt; }
+    .screen-return {
+      position:fixed; left:12px; bottom:12px; z-index:10;
+      border:0; border-radius:10px; padding:10px 13px;
+      background:#173e34; color:#fff; font:600 13px Arial,sans-serif;
+      box-shadow:0 6px 22px rgba(0,0,0,.16);
+    }
+    @media print { .screen-return { display:none !important; } }
   </style>
 </head>
 <body>
@@ -232,7 +239,32 @@ async function printDeviceLabel(phone) {
     </div>
     <img class="qr" src="${images.qr}" alt="QR code">
   </div>
-  <script>window.onload=()=>setTimeout(()=>window.print(),150)</script>
+  <button class="screen-return" type="button" onclick="returnToLager()">← Return to Lager iPhone</button>
+  <script>
+    let printStarted = false;
+    let returnedToApp = false;
+
+    function returnToLager() {
+      if (returnedToApp) return;
+      returnedToApp = true;
+      setTimeout(() => {
+        try { window.close(); } catch {}
+        if (!window.closed) {
+          try { history.back(); } catch {}
+        }
+      }, 80);
+    }
+
+    window.addEventListener("afterprint", returnToLager, { once: true });
+    window.addEventListener("focus", () => {
+      if (printStarted) setTimeout(returnToLager, 250);
+    });
+
+    window.onload = () => setTimeout(() => {
+      printStarted = true;
+      window.print();
+    }, 180);
+  </script>
 </body>
 </html>`);
   popup.document.close();
