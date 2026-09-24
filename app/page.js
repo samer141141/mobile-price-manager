@@ -1464,6 +1464,13 @@ export default function Home() {
                   });
                   await load();
                 }}
+                onCompleteSale={async (phone, saleMeta) => {
+                  await rpc("lager_complete_sale", {
+                    phone_id: String(phone.id),
+                    sale_meta: saleMeta,
+                  });
+                  await load();
+                }}
                 onOpenAd={(phone, photos) => openAdBuilder(phone, "Facebook", "", photos)}
                 onPhotoCountChange={(phoneId, count) =>
                   setPhotoCounts((current) => ({ ...current, [String(phoneId)]: count }))
