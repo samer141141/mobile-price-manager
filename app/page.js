@@ -763,6 +763,7 @@ export default function Home() {
                   className={tab === key ? "active" : ""}
                   key={key}
                   onClick={() => {
+                    if (key === "operations") setOperationsTargetId(null);
                     setTab(key);
                     if (key === "team")
                       rpc("lager_members")
@@ -1439,6 +1440,8 @@ export default function Home() {
             {tab === "operations" && (
               <OperationsCenter
                 phones={phones}
+                initialPhoneId={operationsTargetId}
+                onInitialPhoneOpened={() => setOperationsTargetId(null)}
                 saleHistory={saleHistory}
                 financial={financial}
                 adRecords={adRecords}
@@ -1971,6 +1974,7 @@ export default function Home() {
                     </button>
                     <button
                       onClick={() => {
+                        setOperationsTargetId(String(details.id));
                         setDetails(null);
                         setTab("operations");
                       }}
