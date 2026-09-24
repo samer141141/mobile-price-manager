@@ -747,17 +747,17 @@ export default function Home() {
             </section>
             <nav className="workspace-nav" aria-label="Dashboard sections">
               {[
-                ["available", "Available Phones"],
-                ["operations", "Operations"],
-                ["sold", "Sold Phones"],
-                ["samer", "Samer"],
-                ["market", "Market Prices"],
-                ...(financial ? [["insights", "Insights"]] : []),
-                ["ads", "Ad Center"],
+                ["available", "Available Phones", "Available"],
+                ["operations", "Operations", "Operations"],
+                ["sold", "Sold Phones", "Sold"],
+                ["samer", "Samer", "Samer"],
+                ["market", "Market Prices", "Market"],
+                ...(financial ? [["insights", "Insights", "Insights"]] : []),
+                ["ads", "Ad Center", "Ads"],
                 ...(access.role === "admin"
-                  ? [["team", "Team Permissions"]]
+                  ? [["team", "Team Permissions", "Team"]]
                   : []),
-              ].map(([key, label]) => (
+              ].map(([key, label, mobileLabel]) => (
                 <button
                   aria-current={tab === key ? "page" : undefined}
                   className={tab === key ? "active" : ""}
@@ -771,7 +771,8 @@ export default function Home() {
                         .catch((e) => setError(e.message));
                   }}
                 >
-                  {label}
+                  <span className="nav-label-full">{label}</span>
+                  <span className="nav-label-short">{mobileLabel}</span>
                 </button>
               ))}
             </nav>
