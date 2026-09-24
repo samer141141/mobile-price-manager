@@ -3344,3 +3344,64 @@ footer {
     bottom: 49px;
   }
 }
+
+
+/* Mobile workspace navigation refinement */
+.nav-label-short { display: none; }
+
+@media (max-width: 760px) {
+  .workspace-nav {
+    display: flex !important;
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-start !important;
+    gap: 4px !important;
+    margin: 10px 0 12px !important;
+    padding: 4px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .workspace-nav::-webkit-scrollbar { display: none; }
+  .workspace-nav button {
+    flex: 0 0 auto !important;
+    min-width: auto !important;
+    min-height: 34px !important;
+    padding: 6px 10px !important;
+    border-radius: 9px !important;
+    font-size: 10.5px !important;
+    line-height: 1 !important;
+    scroll-snap-align: start;
+    white-space: nowrap;
+  }
+  .workspace-nav button.active {
+    box-shadow: 0 4px 10px rgba(14,63,51,.13) !important;
+  }
+  .nav-label-full { display: none; }
+  .nav-label-short { display: inline; }
+
+  .ops-hero-actions .scan-device-button {
+    border-color: #9fcdbb !important;
+    background: #e5f3ed !important;
+    color: #174c3e !important;
+    box-shadow: inset 0 0 0 1px rgba(23,76,62,.04);
+  }
+  .ops-hero-actions .scan-device-button:hover:not(:disabled),
+  .ops-hero-actions .scan-device-button:active:not(:disabled) {
+    background: #d7ece3 !important;
+    color: #103d33 !important;
+  }
+}
+
+.scan-device-button {
+  border-color: #9fcdbb !important;
+  background: #e5f3ed !important;
+  color: #174c3e !important;
+  font-weight: 800;
+}
+.scan-device-button:hover:not(:disabled) {
+  background: #d7ece3 !important;
+  color: #103d33 !important;
+}
