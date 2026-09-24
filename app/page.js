@@ -118,6 +118,92 @@ const AD_PLATFORM_URLS = {
   TikTok: "https://www.tiktok.com/upload",
 };
 
+
+function phoneEditorState(phone) {
+  return {
+    id: phone.id,
+    original: phone,
+    form: {
+      ...Object.fromEntries(
+        Object.keys(blank).map((key) => [key, phone[key] ?? ""]),
+      ),
+      inventory_scope: phone.inventory_scope || "business",
+    },
+  };
+}
+
+function controlDate(value, includeTime = false) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return includeTime
+    ? date.toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" })
+    : date.toLocaleDateString("sv-SE", { dateStyle: "medium" });
+}
+
+function buildPhoneTimeline(phone, saleHistory, adRecords) {
+  const phoneId = String(phone?.id ?? "");
+  const entries = [];
+  const push = (at, title, detail, tone = "default") => {
+    if (!at) return;
+    const date = new Date(at);
+    if (Number.isNaN(date.getTime())) return;
+    entries.push({
+      at: date.toISOString(),
+      title,
+      detail,
+      tone,
+    });
+  };
+
+  push(
+    phone.purchase_date,
+    "Purchased",
+    phone.purchase_source ? "Source · " + phone.purchase_source : "Phone added to stock",
+    "purchase",
+  );
+  push(phone.created_at, "Added to Lager iPhone", "Inventory record created", "default");
+
+  (adRecords || [])
+    .filter((record) => String(record.phoneId ?? "") === phoneId)
+    .forEach((record) =>
+      push(
+        record.createdAt,
+        record.status === "Published" ? "Ad published" : "Ad prepared",
+        [record.platform, record.status].filter(Boolean).join(" · "),
+        "ad",
+      ),
+    );
+
+  (saleHistory || [])
+    .filter((sale) => String(sale.phone_id ?? sale.phoneId ?? "") === phoneId)
+    .forEach((sale) => {
+      push(
+        sale.sold_at,
+        "Sold",
+        sale.selling_price != null ? "Sale price · " + money(sale.selling_price) : "Sale completed",
+        "sold",
+      );
+      push(sale.returned_at, "Returned to stock", "Sale history preserved", "return");
+    });
+
+  if (phone.updated_at && phone.updated_at !== phone.created_at) {
+    push(phone.updated_at, "Inventory updated", "Latest saved phone changes", "default");
+  }
+
+  return entries
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, 10);
+}
+
+function controlStatusIndex(status) {
+  const value = String(status || "In Stock").toLowerCase();
+  if (value === "sold") return 3;
+  if (value === "listed") return 2;
+  if (value === "repairing") return 1;
+  return 0;
+}
+
 export default function Home() {
   const router = useRouter();
   const [data, setData] = useState(null),
@@ -161,6 +247,8 @@ export default function Home() {
     [adBuilder, setAdBuilder] = useState(null),
     [photoCounts, setPhotoCounts] = useState({}),
     [photoViewer, setPhotoViewer] = useState(null),
+    [controlPhotos, setControlPhotos] = useState([]),
+    [controlLoading, setControlLoading] = useState(false),
     [priceHistory, setPriceHistory] = useState([]),
     [historyRange, setHistoryRange] = useState(30),
     [adRecords, setAdRecords] = useState([]),
@@ -291,6 +379,24 @@ export default function Home() {
       text: text || buildMarketplaceAd(phone, platform),
       photos,
     });
+  }
+
+  async function openControlCenter(phone) {
+    setDetails(phone);
+    setControlPhotos([]);
+    setControlLoading(true);
+    try {
+      const photos = await loadPhonePhotos(phone.id);
+      setControlPhotos(photos);
+      setPhotoCounts((current) => ({
+        ...current,
+        [String(phone.id)]: photos.length,
+      }));
+    } catch {
+      setControlPhotos([]);
+    } finally {
+      setControlLoading(false);
+    }
   }
 
   async function openPhotoViewer(phone) {
@@ -819,7 +925,7 @@ export default function Home() {
                     <article
                       className="phone inventory-row"
                       key={p.id}
-                      onClick={() => setDetails(p)}
+                      onClick={() => openControlCenter(p)}
                     >
                       <strong>{p.model}</strong>
                       <span>{p.storage_gb} GB</span>
@@ -850,7 +956,7 @@ export default function Home() {
                         className="actions"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button onClick={() => setDetails(p)}>View</button>
+                        <button onClick={() => openControlCenter(p)}>View</button>
                         {!isSold(p) && (
                           <button
                             className="ad-button"
@@ -879,22 +985,7 @@ export default function Home() {
                         )}
                         <button
                           disabled={busy}
-                          onClick={() =>
-                            setEditor({
-                              id: p.id,
-                              original: p,
-                              form: {
-                                ...Object.fromEntries(
-                                  Object.keys(blank).map((k) => [
-                                    k,
-                                    p[k] ?? "",
-                                  ]),
-                                ),
-                                inventory_scope:
-                                  p.inventory_scope || "business",
-                              },
-                            })
-                          }
+                          onClick={() => setEditor(phoneEditorState(p))}
                         >
                           Edit
                         </button>
@@ -1734,72 +1825,309 @@ export default function Home() {
           <DealCalculatorContent state={dealCalculator} />
         </Modal>
       )}
-      {details && (
-        <Modal
-          title={`${details.model} details`}
-          onClose={() => setDetails(null)}
-          error=""
-        >
-          <dl className="detail-grid">
-            <Detail label="Model" value={details.model} />
-            <Detail label="Storage" value={`${details.storage_gb} GB`} />
-            <Detail label="Color" value={details.color || "—"} />
-            <Detail label="Grade" value={details.grade || "—"} />
-            <Detail label="Condition" value={details.condition || "—"} />
-            <Detail
-              label="Battery Health"
-              value={
-                details.battery_health == null
-                  ? "—"
-                  : `${details.battery_health}%`
-              }
-            />
-            <Detail label="IMEI" value={details.imei || "Not recorded"} />
-            <Detail label="Status" value={details.status || "In Stock"} />
-            <Detail
-              label="Purchase Source"
-              value={details.purchase_source || "—"}
-            />
-            <Detail
-              label="Purchase Date"
-              value={details.purchase_date || "—"}
-            />
-            <Detail
-              label="Added"
-              value={
-                details.created_at
-                  ? new Date(details.created_at).toLocaleDateString()
-                  : "—"
-              }
-            />
-            {financial && (
-              <>
-                <Detail
-                  label="Purchase Price"
-                  value={money(details.purchase_price)}
-                />
-                <Detail
-                  label="Repair Cost"
-                  value={money(details.repair_cost)}
-                />
-                <Detail label="Other Cost" value={money(details.other_cost)} />
-                <Detail
-                  label="Selling Price"
-                  value={money(details.selling_price)}
-                />
-                <Detail label="Profit" value={money(profit(details))} />
-              </>
-            )}
-          </dl>
-          {details.notes && (
-            <p className="notes">
-              <strong>Notes</strong>
-              <br />
-              {details.notes}
-            </p>
-          )}
-        </Modal>
-      )}
+      {details && (() => {
+        const timeline = buildPhoneTimeline(details, saleHistory, adRecords);
+        const statusIndex = controlStatusIndex(details.status);
+        const totalCost = cost(details);
+        const expectedProfit = profit(details);
+        const margin =
+          Number(details.selling_price || 0) > 0
+            ? Math.round((expectedProfit / Number(details.selling_price || 0)) * 100)
+            : 0;
+        const matchingSales = saleHistory.filter(
+          (sale) => String(sale.phone_id ?? sale.phoneId ?? "") === String(details.id),
+        );
+        const latestSale = matchingSales.find((sale) => !sale.returned_at) || matchingSales[0];
+        const photos = controlPhotos || [];
+
+        return (
+          <Modal
+            title="Phone Control Center"
+            className="control-center-dialog"
+            onClose={() => {
+              setDetails(null);
+              setControlPhotos([]);
+            }}
+            error=""
+          >
+            <div className="phone-control-center">
+              <section className="control-hero">
+                <button
+                  type="button"
+                  className="control-photo-hero"
+                  disabled={controlLoading || !photos.length}
+                  onClick={() =>
+                    photos.length && setPhotoViewer({ phone: details, photos })
+                  }
+                  aria-label={photos.length ? "Open phone photos" : "No phone photos"}
+                >
+                  {controlLoading ? (
+                    <span className="control-photo-placeholder">Loading photos…</span>
+                  ) : photos[0] ? (
+                    <img src={photos[0].dataUrl} alt={details.model + " photo"} />
+                  ) : (
+                    <span className="control-photo-placeholder">
+                      <strong>📱</strong>
+                      No photo
+                    </span>
+                  )}
+                  {photos.length > 0 && (
+                    <span className="control-photo-count">📷 {photos.length}</span>
+                  )}
+                </button>
+
+                <div className="control-hero-copy">
+                  <div className="control-eyebrow">DEVICE WORKSPACE</div>
+                  <div className="control-title-row">
+                    <div>
+                      <h2>{details.model}</h2>
+                      <p>
+                        {[details.storage_gb ? details.storage_gb + " GB" : "", details.color, details.grade ? "Grade " + details.grade : ""]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <span className={"control-status " + String(details.status || "in-stock").toLowerCase().replace(/\s+/g, "-")}>
+                      {details.status || "In Stock"}
+                    </span>
+                  </div>
+
+                  <div className="control-identifiers">
+                    <div>
+                      <span>IMEI</span>
+                      <strong>{details.imei || "Not recorded"}</strong>
+                    </div>
+                    <div>
+                      <span>Battery</span>
+                      <strong>
+                        {details.battery_health == null ? "—" : details.battery_health + "%"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Condition</span>
+                      <strong>{details.condition || "—"}</strong>
+                    </div>
+                  </div>
+
+                  <div className="control-actions">
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        setEditor(phoneEditorState(details));
+                        setDetails(null);
+                      }}
+                    >
+                      Edit Phone
+                    </button>
+                    {!isSold(details) && (
+                      <button
+                        className="ad-button"
+                        onClick={() => {
+                          openAdBuilder(details, "Facebook", "", photos);
+                          setDetails(null);
+                        }}
+                      >
+                        Create Ad
+                      </button>
+                    )}
+                    {photos.length > 0 && (
+                      <button
+                        className="photo-button"
+                        onClick={() => setPhotoViewer({ phone: details, photos })}
+                      >
+                        Open Photos
+                      </button>
+                    )}
+                    {financial && !isSold(details) && (
+                      <button
+                        className="deal-button"
+                        onClick={() => {
+                          openDealCalculator(details);
+                          setDetails(null);
+                        }}
+                      >
+                        Market & Deal
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (details.imei) {
+                          try {
+                            await navigator.clipboard.writeText(details.imei);
+                            setNotice("IMEI copied.");
+                          } catch {}
+                        }
+                      }}
+                      disabled={!details.imei}
+                    >
+                      Copy IMEI
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDetails(null);
+                        setTab("operations");
+                      }}
+                    >
+                      Operations
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="control-stage-card">
+                <div className="control-section-heading">
+                  <div>
+                    <span>WORKFLOW</span>
+                    <h3>Phone status</h3>
+                  </div>
+                  <small>Current · {details.status || "In Stock"}</small>
+                </div>
+                <div className="control-stage-track">
+                  {["In Stock", "Repairing", "Listed", "Sold"].map((stage, index) => (
+                    <div
+                      key={stage}
+                      className={
+                        "control-stage " +
+                        (index < statusIndex ? "done" : index === statusIndex ? "active" : "")
+                      }
+                    >
+                      <span>{index < statusIndex ? "✓" : index + 1}</span>
+                      <strong>{stage}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className={"control-main-grid" + (financial ? "" : " no-financial")}>
+                <section className="control-card">
+                  <div className="control-section-heading">
+                    <div>
+                      <span>DEVICE</span>
+                      <h3>Phone information</h3>
+                    </div>
+                  </div>
+                  <dl className="control-detail-grid">
+                    <Detail label="Model" value={details.model} />
+                    <Detail label="Storage" value={details.storage_gb ? details.storage_gb + " GB" : "—"} />
+                    <Detail label="Color" value={details.color || "—"} />
+                    <Detail label="Grade" value={details.grade || "—"} />
+                    <Detail label="Purchase source" value={details.purchase_source || "—"} />
+                    <Detail label="Purchase date" value={controlDate(details.purchase_date)} />
+                    <Detail label="Added" value={controlDate(details.created_at)} />
+                    <Detail label="Last updated" value={controlDate(details.updated_at)} />
+                  </dl>
+                  {details.notes && (
+                    <div className="control-notes">
+                      <span>NOTES</span>
+                      <p>{details.notes}</p>
+                    </div>
+                  )}
+                </section>
+
+                {financial && (
+                  <section className="control-card control-finance-card">
+                    <div className="control-section-heading">
+                      <div>
+                        <span>PROFIT</span>
+                        <h3>Financial overview</h3>
+                      </div>
+                      <strong className={expectedProfit >= 0 ? "positive" : "negative"}>
+                        {money(expectedProfit)}
+                      </strong>
+                    </div>
+                    <div className="control-kpi-grid">
+                      <div>
+                        <span>Total cost</span>
+                        <strong>{money(totalCost)}</strong>
+                      </div>
+                      <div>
+                        <span>Selling price</span>
+                        <strong>{money(details.selling_price)}</strong>
+                      </div>
+                      <div>
+                        <span>Expected profit</span>
+                        <strong>{money(expectedProfit)}</strong>
+                      </div>
+                      <div>
+                        <span>Margin</span>
+                        <strong>{margin}%</strong>
+                      </div>
+                    </div>
+                    <div className="control-cost-breakdown">
+                      <div><span>Purchase</span><strong>{money(details.purchase_price)}</strong></div>
+                      <div><span>Repair</span><strong>{money(details.repair_cost)}</strong></div>
+                      <div><span>Other</span><strong>{money(details.other_cost)}</strong></div>
+                    </div>
+                    {latestSale && (
+                      <p className="control-sale-note">
+                        Latest sale · {money(latestSale.selling_price)} · {controlDate(latestSale.sold_at)}
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                <section className="control-card control-photo-card">
+                  <div className="control-section-heading">
+                    <div>
+                      <span>MEDIA</span>
+                      <h3>Phone photos</h3>
+                    </div>
+                    <small>{controlLoading ? "Loading…" : photos.length + " saved"}</small>
+                  </div>
+                  {photos.length ? (
+                    <div className="control-photo-grid">
+                      {photos.slice(0, 6).map((photo, index) => (
+                        <button
+                          type="button"
+                          key={photo.id || photo.storagePath || index}
+                          onClick={() => setPhotoViewer({ phone: details, photos })}
+                          aria-label={"Open phone photo " + (index + 1)}
+                        >
+                          <img src={photo.dataUrl} alt={details.model + " photo " + (index + 1)} />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="control-empty-state">
+                      <strong>{controlLoading ? "Checking photos…" : "No photos saved"}</strong>
+                      <span>Use Operations to add device photos.</span>
+                    </div>
+                  )}
+                </section>
+
+                <section className="control-card control-timeline-card">
+                  <div className="control-section-heading">
+                    <div>
+                      <span>HISTORY</span>
+                      <h3>Device timeline</h3>
+                    </div>
+                    <small>{timeline.length} events</small>
+                  </div>
+                  {timeline.length ? (
+                    <div className="control-timeline">
+                      {timeline.map((event, index) => (
+                        <div className={"control-timeline-row " + event.tone} key={event.at + event.title + index}>
+                          <span className="control-timeline-dot" />
+                          <div>
+                            <strong>{event.title}</strong>
+                            <p>{event.detail}</p>
+                          </div>
+                          <time>{controlDate(event.at, true)}</time>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="control-empty-state">
+                      <strong>No activity yet</strong>
+                      <span>Changes, ads and sales will appear here.</span>
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
       {deleting && (
         <Modal
           title="Delete phone?"
@@ -1959,7 +2287,7 @@ function Detail({ label, value }) {
     </div>
   );
 }
-function Modal({ title, onClose, children, error }) {
+function Modal({ title, onClose, children, error, className = "" }) {
   const ref = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
@@ -1969,6 +2297,7 @@ function Modal({ title, onClose, children, error }) {
   return (
     <dialog
       ref={ref}
+      className={className}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
