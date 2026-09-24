@@ -222,6 +222,7 @@ export default function Home() {
     }),
     [editor, setEditor] = useState(null),
     [details, setDetails] = useState(null),
+    [operationsTargetId, setOperationsTargetId] = useState(null),
     [deleting, setDeleting] = useState(null),
     [exporting, setExporting] = useState(false),
     [importing, setImporting] = useState(false),
