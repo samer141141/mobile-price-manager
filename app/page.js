@@ -30,7 +30,11 @@ import {
   SuggestedPricePanel,
 } from "../components/business-tools";
 import OperationsCenter from "../components/operations-center";
-import { loadPhonePhotos, photoToFile } from "../lib/phone-photos";
+import {
+  listPhoneIdsWithPhotos,
+  loadPhonePhotos,
+  photoToFile,
+} from "../lib/phone-photos";
 const conditions = ["Excellent", "Good", "Fair", "Damaged"],
   marketConditions = ["Used", "Renewed", "Refurbished", "New"],
   statuses = ["In Stock", "Repairing", "Listed", "Sold"],
@@ -179,18 +183,20 @@ export default function Home() {
       setPhotoCounts({});
       return () => { active = false; };
     }
-    Promise.all(
-      list.map(async (phone) => {
-        try {
-          const photos = await loadPhonePhotos(phone.id);
-          return [String(phone.id), photos.length];
-        } catch {
-          return [String(phone.id), 0];
-        }
-      }),
-    ).then((entries) => {
-      if (active) setPhotoCounts(Object.fromEntries(entries));
-    });
+
+    const validPhoneIds = new Set(list.map((phone) => String(phone.id)));
+    listPhoneIdsWithPhotos()
+      .then((phoneIds) => {
+        if (!active) return;
+        const entries = phoneIds
+          .filter((phoneId) => validPhoneIds.has(String(phoneId)))
+          .map((phoneId) => [String(phoneId), 1]);
+        setPhotoCounts(Object.fromEntries(entries));
+      })
+      .catch(() => {
+        if (active) setPhotoCounts({});
+      });
+
     return () => { active = false; };
   }, [data?.phones]);
   const load = useCallback(async () => {
@@ -860,7 +866,7 @@ export default function Home() {
                             title="Open saved phone photos"
                             onClick={() => openPhotoViewer(p)}
                           >
-                            📷 {photoCounts[String(p.id)]}
+                            📷 Photos
                           </button>
                         )}
                         {financial && !isSold(p) && (
