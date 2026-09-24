@@ -406,7 +406,21 @@ export default function OperationsCenter({
     [phones, ops, adRecords, priceHistory],
   );
 
-  const searchResults = useMemo(() => globalSearch(phones, query), [phones, query]);
+  const searchResults = useMemo(() => {
+    const direct = globalSearch(phones, query);
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return direct;
+    const byId = new Map(phones.map((phone) => [String(phone.id), phone]));
+    const customerMatches = (saleHistory || [])
+      .filter((sale) =>
+        [sale.buyer_name, sale.buyer_contact, sale.order_ref, sale.sales_channel]
+          .map((value) => String(value || "").toLowerCase())
+          .some((value) => value.includes(q)),
+      )
+      .map((sale) => byId.get(String(sale.phone_id ?? sale.phoneId ?? "")))
+      .filter(Boolean);
+    return [...new Map([...direct, ...customerMatches].map((phone) => [String(phone.id), phone])).values()].slice(0, 15);
+  }, [phones, saleHistory, query]);
   const suppliers = useMemo(() => supplierAnalytics(phones, saleHistory), [phones, saleHistory]);
   const accounting = useMemo(
     () => monthlyAccounting(saleHistory, year, month),
@@ -920,7 +934,7 @@ export default function OperationsCenter({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Quick search: model, IMEI, storage, color, status…"
+          placeholder="Quick search: model, IMEI, buyer, contact, order…"
         />
         {query && <button type="button" onClick={() => setQuery("")}>Clear</button>}
       </div>
