@@ -23,6 +23,8 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Build OpenNext worker
         run: pnpm exec opennextjs-cloudflare build
+        env:
+          NEXT_PUBLIC_BUILD_ID: ${{ github.sha }}
       - name: Verify worker artifact
         run: test -f .open-next/worker.js
       - name: Deploy to Cloudflare
