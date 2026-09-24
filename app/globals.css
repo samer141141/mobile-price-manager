@@ -3262,3 +3262,85 @@ footer {
     grid-column: 2;
   }
 }
+
+
+/* Installable app */
+.pwa-install {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 90;
+}
+.pwa-install-button {
+  min-height: 44px;
+  border-color: #153e35;
+  background: #153e35;
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 12px 34px rgba(10, 50, 40, .22);
+}
+.pwa-install-button:hover {
+  background: #24624f;
+  color: #fff;
+}
+.pwa-install-help {
+  position: absolute;
+  right: 0;
+  bottom: 54px;
+  width: min(330px, calc(100vw - 24px));
+  display: grid;
+  gap: 7px;
+  padding: 16px 42px 16px 16px;
+  border: 1px solid #d5e3dc;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 22px 70px rgba(7, 38, 30, .22);
+}
+.pwa-install-help strong {
+  color: #173e34;
+}
+.pwa-install-help span {
+  color: #4d675e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.pwa-install-help small {
+  color: #7b8b85;
+  line-height: 1.4;
+}
+.pwa-help-close {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  min-height: 32px;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  font-size: 20px;
+}
+.backup-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #d6e5de;
+  border-radius: 10px;
+  background: #f5faf7;
+  color: #3f695b;
+  font-size: 10px;
+  font-weight: 800;
+}
+@media (max-width: 600px) {
+  .pwa-install {
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .pwa-install-button {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+  .pwa-install-help {
+    bottom: 49px;
+  }
+}
