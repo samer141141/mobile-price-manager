@@ -304,6 +304,7 @@ export default function OperationsCenter({
   const scannerRef = useRef(null);
   const inventoryScannerRef = useRef(null);
   const photoRef = useRef(null);
+  const cameraPhotoRef = useRef(null);
   const threeURef = useRef(null);
 
   useEffect(() => {
@@ -667,6 +668,43 @@ export default function OperationsCenter({
           ? "Photo saved to cloud storage and is available on your other devices."
           : "Photo saved locally. Cloud storage is not ready yet, so it will upload automatically when available.",
       );
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function addPhotos(files) {
+    const list = Array.from(files || []);
+    if (!selected || !list.length) return;
+    const remaining = Math.max(0, 6 - photos.length);
+    if (!remaining) {
+      setError("Maximum 6 photos per phone.");
+      return;
+    }
+    const chosen = list.slice(0, remaining);
+    try {
+      for (const file of chosen) {
+        const dataUrl = await compressImage(file);
+        await savePhonePhoto(selected.id, dataUrl);
+      }
+      const next = await loadPhonePhotos(selected.id);
+      setPhotos(next);
+      onPhotoCountChange?.(selected.id, next.length);
+      logAction(
+        chosen.length === 1 ? "Photo added" : "Photos added",
+        selected,
+        chosen.length + (chosen.length === 1 ? " photo" : " photos"),
+      );
+      setNotice(
+        chosen.length === 1
+          ? "Photo saved and is ready for ads."
+          : chosen.length + " photos saved and ready for ads.",
+      );
+      if (list.length > remaining) {
+        setNotice(
+          chosen.length + " photos saved. Maximum 6 photos are allowed per phone.",
+        );
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -1416,10 +1454,22 @@ export default function OperationsCenter({
 
             {panel === "photos" && (
               <div className="phone-photos">
-                <div className="actions">
-                  <button type="button" className="primary" onClick={() => photoRef.current?.click()}>＋ Add Photo</button>
+                <div className="actions photo-source-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => cameraPhotoRef.current?.click()}
+                  >
+                    📷 Camera
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => photoRef.current?.click()}
+                  >
+                    🖼 Photo Library
+                  </button>
                   <input
-                    ref={photoRef}
+                    ref={cameraPhotoRef}
                     hidden
                     type="file"
                     accept="image/*"
@@ -1428,6 +1478,18 @@ export default function OperationsCenter({
                       const file = e.target.files?.[0];
                       e.target.value = "";
                       addPhoto(file);
+                    }}
+                  />
+                  <input
+                    ref={photoRef}
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      e.target.value = "";
+                      addPhotos(files);
                     }}
                   />
                 </div>
