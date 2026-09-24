@@ -27,6 +27,7 @@ import {
   loadPhonePhotos,
   savePhonePhoto,
 } from "../lib/phone-photos";
+import { supabase } from "../lib/supabase";
 
 const OPS_KEY = "lager-ops-v2";
 const AUDIT_KEY = "lager-audit-v2";
@@ -254,6 +255,7 @@ export default function OperationsCenter({
   onCreatePhone,
   onSavePhone,
   onTransition,
+  onCompleteSale,
   onOpenAd,
   onOpenDeal,
   onReplaceAdRecords,
@@ -264,6 +266,7 @@ export default function OperationsCenter({
 }) {
   const [ops, setOps] = useState({});
   const [audit, setAudit] = useState([]);
+  const [snapshotStatus, setSnapshotStatus] = useState(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [panel, setPanel] = useState("quick");
@@ -288,6 +291,7 @@ export default function OperationsCenter({
     payment: "Swish",
     channel: "Direct",
     orderRef: "",
+    warrantyMonths: "3",
     price: "",
   });
   const [photos, setPhotos] = useState([]);
@@ -303,6 +307,17 @@ export default function OperationsCenter({
   useEffect(() => {
     setOps(readJson(OPS_KEY, {}));
     setAudit(readJson(AUDIT_KEY, []));
+
+    supabase.rpc("lager_activity", { limit_count: 200 }).then(({ data }) => {
+      if (Array.isArray(data)) {
+        setAudit(data);
+        localStorage.setItem(AUDIT_KEY, JSON.stringify(data));
+      }
+    }).catch(() => {});
+
+    supabase.rpc("lager_snapshot_status").then(({ data }) => {
+      if (data) setSnapshotStatus(data);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -315,9 +330,24 @@ export default function OperationsCenter({
       onPhotoCountChange?.(selected.id, next.length);
     }).catch(() => setPhotos([]));
     const record = readJson(OPS_KEY, {})[String(selected.id)] || {};
+    const cloudSale = (saleHistory || []).find(
+      (sale) =>
+        String(sale.phone_id ?? sale.phoneId ?? "") === String(selected.id) &&
+        !sale.returned_at,
+    );
     setSaleForm((current) => ({
       ...current,
       price: String(selected.selling_price || current.price || ""),
+      ...(cloudSale
+        ? {
+            buyer: cloudSale.buyer_name || "",
+            contact: cloudSale.buyer_contact || "",
+            payment: cloudSale.payment || current.payment,
+            channel: cloudSale.sales_channel || current.channel,
+            orderRef: cloudSale.order_ref || "",
+            warrantyMonths: String(cloudSale.warranty_months ?? current.warrantyMonths ?? 3),
+          }
+        : {}),
       ...(record.sale || {}),
     }));
   }, [selected?.id]);
@@ -339,6 +369,15 @@ export default function OperationsCenter({
     const next = [entry, ...audit].slice(0, 600);
     setAudit(next);
     localStorage.setItem(AUDIT_KEY, JSON.stringify(next));
+    Promise.resolve(
+      supabase.rpc("lager_log_activity", {
+        action_name: action,
+        phone_id: entry.phoneId || null,
+        phone_label: entry.phone || null,
+        detail: detail || null,
+        metadata: {},
+      }),
+    ).catch(() => {});
   }
 
   function patchOps(phoneId, patch) {
@@ -624,10 +663,14 @@ export default function OperationsCenter({
     try {
       const price = Number(saleForm.price || selected.selling_price || 0);
       if (price <= 0) throw new Error("Enter the final selling price.");
-      if (Number(selected.selling_price || 0) !== price) {
-        await onSavePhone(selected, { selling_price: price });
+      if (onCompleteSale) {
+        await onCompleteSale(selected, { ...saleForm, price });
+      } else {
+        if (Number(selected.selling_price || 0) !== price) {
+          await onSavePhone(selected, { selling_price: price });
+        }
+        await onTransition(selected, "Sold");
       }
-      await onTransition(selected, "Sold");
       patchOps(selected.id, {
         stage: "Sold",
         sale: {
@@ -671,6 +714,7 @@ export default function OperationsCenter({
         ["Sales channel", sale?.channel || "—"],
         ["Order / reference", sale?.orderRef || "—"],
         ["Price", money(sale?.price || phone.selling_price)],
+        ["Warranty", Number(sale?.warrantyMonths || 0) > 0 ? sale.warrantyMonths + " month(s)" : "No warranty"],
       ];
       doc.setFontSize(10);
       for (const [label, value] of lines) {
@@ -769,7 +813,18 @@ export default function OperationsCenter({
     }
   }
 
-  function backupAll() {
+  async function backupAll() {
+    try {
+      const { data, error } = await supabase.rpc("lager_create_snapshot");
+      if (error) throw error;
+      const { data: status } = await supabase.rpc("lager_snapshot_status");
+      if (status) setSnapshotStatus(status);
+      if (data?.created_at) {
+        setNotice("Cloud backup saved. Local backup is downloading too.");
+      }
+    } catch (e) {
+      setError("Cloud backup failed: " + e.message);
+    }
     downloadJson(
       "lager-iphone-backup-" + new Date().toISOString().slice(0, 10) + ".json",
       {
@@ -782,8 +837,7 @@ export default function OperationsCenter({
         priceHistory,
       },
     );
-    logAction("Backup created", null, phones.length + " inventory rows");
-    setNotice("Backup downloaded.");
+    logAction("Backup downloaded", null, phones.length + " inventory rows");
   }
 
   async function restoreBackup(file) {
@@ -818,6 +872,11 @@ export default function OperationsCenter({
         </div>
         <div className="actions ops-hero-actions">
           <button type="button" onClick={backupAll}>Backup</button>
+          {snapshotStatus?.last_created_at && (
+            <span className="backup-status" title="Latest Supabase cloud snapshot">
+              ☁ {new Date(snapshotStatus.last_created_at).toLocaleDateString("sv-SE")}
+            </span>
+          )}
           <button type="button" onClick={() => restoreRef.current?.click()}>Restore</button>
           <button type="button" className="scan-device-button" onClick={() => inventoryScannerRef.current?.click()}>
             ▣ Scan Device
@@ -1017,7 +1076,7 @@ export default function OperationsCenter({
           <div>
             <span className="section-kicker">Control</span>
             <h3>Audit Log</h3>
-            <p>Recent operational actions performed in this browser.</p>
+            <p>Recent operational actions synced across your signed-in devices.</p>
           </div>
         </div>
         <div className="audit-list">
@@ -1026,7 +1085,7 @@ export default function OperationsCenter({
               <span>{new Date(row.at).toLocaleString()}</span>
               <strong>{row.action}</strong>
               <span>{row.phone || "System"}</span>
-              <small>{row.detail}</small>
+              <small>{row.detail}{row.actor ? " · " + row.actor : ""}</small>
             </div>
           ))}
           {!audit.length && <p className="empty">No operational actions logged yet.</p>}
@@ -1382,6 +1441,14 @@ export default function OperationsCenter({
                     </select>
                   </label>
                   <label><span>Order / reference</span><input value={saleForm.orderRef} onChange={(e) => setSaleForm({ ...saleForm, orderRef: e.target.value })} /></label>
+                  <label>
+                    <span>Warranty</span>
+                    <select value={saleForm.warrantyMonths} onChange={(e) => setSaleForm({ ...saleForm, warrantyMonths: e.target.value })}>
+                      {[0,1,3,6,12].map((months) => (
+                        <option key={months} value={months}>{months === 0 ? "No warranty" : months + " month" + (months === 1 ? "" : "s")}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
                 <button type="button" className="primary" onClick={saveSale}>Complete Sale</button>
               </div>
