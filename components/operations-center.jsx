@@ -1487,7 +1487,7 @@ export default function OperationsCenter({
                     accept="image/*"
                     multiple
                     onChange={(e) => {
-                      const files = e.target.files;
+                      const files = Array.from(e.target.files || []);
                       e.target.value = "";
                       addPhotos(files);
                     }}
