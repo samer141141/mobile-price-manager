@@ -248,6 +248,8 @@ function stageClass(stage) {
 
 export default function OperationsCenter({
   phones,
+  initialPhoneId,
+  onInitialPhoneOpened,
   saleHistory,
   financial,
   adRecords,
@@ -319,6 +321,18 @@ export default function OperationsCenter({
       if (data) setSnapshotStatus(data);
     }).catch(() => {});
   }, []);
+
+  // Open the requested phone directly when Operations is entered from a device.
+  useEffect(() => {
+    if (!initialPhoneId) return;
+    const phone = (phones || []).find(
+      (item) => String(item.id) === String(initialPhoneId),
+    );
+    if (!phone) return;
+    setSelected(phone);
+    setPanel("quick");
+    onInitialPhoneOpened?.();
+  }, [initialPhoneId, phones]);
 
   useEffect(() => {
     if (!selected?.id) {
