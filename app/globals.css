@@ -3454,3 +3454,111 @@ footer {
     min-width: 112px;
   }
 }
+
+
+/* Spare Parts inventory */
+.spare-parts-panel .title {
+  align-items: flex-start;
+}
+.spare-parts-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 12px 0 18px;
+}
+.spare-parts-summary .card {
+  padding: 16px 18px;
+}
+.spare-parts-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin: 8px 0 4px;
+  padding: 12px;
+  border: 1px solid #e1ece7;
+  border-radius: 14px;
+  background: #f8fbf9;
+}
+.spare-parts-toolbar label {
+  margin: 0;
+}
+.spare-parts-count {
+  min-width: 92px;
+  padding: 11px 13px;
+  border: 1px solid #dbe7e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #506b62;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.spare-parts-table {
+  margin-top: 16px;
+  border: 1px solid #dce8e2;
+  border-radius: 14px;
+  background: #fff;
+}
+.spare-parts-table table {
+  min-width: 820px;
+}
+.spare-parts-table th {
+  white-space: nowrap;
+}
+.spare-part-actions {
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.spare-part-actions button {
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+.spare-part-qty {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eaf4ef;
+  color: #174c40;
+  font-weight: 800;
+}
+.spare-part-qty.empty {
+  background: #f5ecea;
+  color: #93483c;
+}
+.spare-part-dialog {
+  width: min(760px, calc(100% - 28px));
+}
+.spare-part-dialog .title p {
+  margin-top: 4px;
+}
+
+@media (max-width: 700px) {
+  .spare-parts-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .spare-parts-summary .card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .spare-parts-toolbar {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .spare-parts-count {
+    width: 100%;
+  }
+  .spare-parts-table table {
+    min-width: 720px;
+  }
+}
+@media (max-width: 380px) {
+  .spare-parts-summary {
+    grid-template-columns: 1fr;
+  }
+  .spare-parts-summary .card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
