@@ -30,6 +30,7 @@ import {
   SuggestedPricePanel,
 } from "../components/business-tools";
 import OperationsCenter from "../components/operations-center";
+import SparePartsPanel from "../components/spare-parts";
 import {
   listPhoneIdsWithPhotos,
   loadPhonePhotos,
@@ -752,6 +753,7 @@ export default function Home() {
                 ["operations", "Operations", "Operations"],
                 ["sold", "Sold Phones", "Sold"],
                 ["samer", "Samer", "Samer"],
+                ["parts", "Spare Parts", "Parts"],
                 ["market", "Market Prices", "Market"],
                 ...(financial ? [["insights", "Insights", "Insights"]] : []),
                 ["ads", "Ad Center", "Ads"],
@@ -1057,6 +1059,7 @@ export default function Home() {
                 )}
               </section>
             )}
+            {tab === "parts" && <SparePartsPanel access={access} />}
             {tab === "market" && (
               <section className="panel market-panel">
                 <h2>Market Prices</h2>
