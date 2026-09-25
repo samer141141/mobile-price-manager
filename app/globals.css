@@ -3455,71 +3455,67 @@ footer {
   }
 }
 
-
-/* Spare Parts inventory */
+/* Spare Parts — aligned with phone inventory */
 .spare-parts-panel .title {
   align-items: flex-start;
 }
-.spare-parts-summary {
+.parts-inventory-toolbar {
+  grid-template-columns: minmax(150px, 190px);
+  justify-content: end;
+  min-width: 150px;
+}
+.parts-search {
+  display: block;
+}
+.parts-filter-bar {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 12px 0 18px;
 }
-.spare-parts-summary .card {
-  padding: 16px 18px;
-}
-.spare-parts-toolbar {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto;
-  gap: 14px;
-  align-items: end;
-  margin: 8px 0 4px;
-  padding: 12px;
-  border: 1px solid #e1ece7;
-  border-radius: 14px;
-  background: #f8fbf9;
-}
-.spare-parts-toolbar label {
-  margin: 0;
-}
-.spare-parts-count {
-  min-width: 92px;
-  padding: 11px 13px;
-  border: 1px solid #dbe7e1;
-  border-radius: 10px;
-  background: #fff;
-  color: #506b62;
+.spare-parts-notice {
+  margin: 12px 0;
+  padding: 10px 12px;
   font-size: 12px;
-  font-weight: 700;
-  text-align: center;
 }
-.spare-parts-table {
-  margin-top: 16px;
-  border: 1px solid #dce8e2;
-  border-radius: 14px;
-  background: #fff;
+.spare-parts-inventory .inventory-row {
+  grid-template-columns:
+    minmax(130px, 1.35fr)
+    minmax(95px, 1fr)
+    minmax(105px, 1fr)
+    minmax(70px, .65fr)
+    minmax(58px, .5fr)
+    minmax(95px, .8fr)
+    minmax(150px, 1.15fr);
+  cursor: default;
 }
-.spare-parts-table table {
-  min-width: 820px;
+.spare-parts-inventory.financial .inventory-row {
+  grid-template-columns:
+    minmax(130px, 1.35fr)
+    minmax(95px, 1fr)
+    minmax(105px, 1fr)
+    minmax(70px, .65fr)
+    minmax(58px, .5fr)
+    minmax(90px, .75fr)
+    minmax(95px, .8fr)
+    minmax(150px, 1.15fr);
 }
-.spare-parts-table th {
-  white-space: nowrap;
+.spare-parts-inventory .inventory-row:hover {
+  background: #f5faf7;
 }
 .spare-part-actions {
   justify-content: flex-start;
-  flex-wrap: nowrap;
+  flex-wrap: nowrap !important;
   gap: 6px;
 }
 .spare-part-actions button {
   min-height: 34px;
-  padding: 6px 9px;
+  padding: 5px 9px;
   font-size: 11px;
 }
 .spare-part-qty {
   display: inline-grid;
   place-items: center;
-  min-width: 34px;
-  min-height: 28px;
-  padding: 3px 8px;
+  min-width: 32px;
+  min-height: 27px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: #eaf4ef;
   color: #174c40;
@@ -3536,29 +3532,87 @@ footer {
   margin-top: 4px;
 }
 
-@media (max-width: 700px) {
-  .spare-parts-summary {
+@media (max-width: 880px) {
+  .parts-inventory-toolbar {
+    min-width: 0;
+  }
+  .spare-parts-inventory .inventory-row,
+  .spare-parts-inventory.financial .inventory-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .spare-parts-summary .card:last-child:nth-child(odd) {
+  .spare-inventory-row > [data-label]::before {
+    content: attr(data-label) !important;
+    display: block;
+    margin-bottom: 3px;
+    color: #73847c;
+    font-size: 10px;
+    font-weight: 650;
+  }
+  .spare-inventory-row .actions {
     grid-column: 1 / -1;
   }
-  .spare-parts-toolbar {
+}
+
+@media (max-width: 700px) {
+  .parts-inventory-toolbar {
+    width: 100%;
     grid-template-columns: 1fr;
-    gap: 8px;
   }
-  .spare-parts-count {
+  .parts-inventory-toolbar .add-phone-button {
     width: 100%;
   }
-  .spare-parts-table table {
-    min-width: 720px;
+  .parts-filter-bar {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    scrollbar-width: none;
+  }
+  .parts-filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .parts-filter-bar label {
+    flex: 0 0 145px;
+  }
+  .spare-parts-notice {
+    margin: 9px 0;
+    padding: 9px 10px;
   }
 }
-@media (max-width: 380px) {
-  .spare-parts-summary {
-    grid-template-columns: 1fr;
+
+@media (max-width: 600px) {
+  .spare-parts-inventory .inventory-row,
+  .spare-parts-inventory.financial .inventory-row {
+    grid-template-columns: 1.35fr .9fr .8fr;
+    gap: 8px;
+    padding: 11px 9px;
   }
-  .spare-parts-summary .card:last-child:nth-child(odd) {
-    grid-column: auto;
+  .spare-inventory-row > strong {
+    font-size: 14px;
+  }
+  .spare-inventory-row > span {
+    font-size: 12px;
+  }
+  .spare-inventory-row > [data-label]::before {
+    font-size: 9px;
+    margin-bottom: 2px;
+  }
+  .spare-inventory-row .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .spare-inventory-row .actions button {
+    width: 100%;
+    min-height: 36px;
+    padding: 5px 4px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .spare-parts-inventory .inventory-row,
+  .spare-parts-inventory.financial .inventory-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
