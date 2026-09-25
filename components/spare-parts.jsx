@@ -58,6 +58,11 @@ export default function SparePartsPanel({ access }) {
   const canDelete = !!access?.can_delete;
   const [parts, setParts] = useState([]);
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState({
+    model: "",
+    partType: "",
+    quality: "",
+  });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editor, setEditor] = useState(null);
@@ -83,8 +88,12 @@ export default function SparePartsPanel({ access }) {
 
   const filtered = useMemo(() => {
     const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    if (!tokens.length) return parts;
     return parts.filter((part) => {
+      if (filters.model && part.device_model !== filters.model) return false;
+      if (filters.partType && part.part_type !== filters.partType) return false;
+      if (filters.quality && part.quality !== filters.quality) return false;
+
+      if (!tokens.length) return true;
       const haystack = [
         part.device_model,
         part.part_type,
@@ -98,7 +107,7 @@ export default function SparePartsPanel({ access }) {
         .join(" ");
       return tokens.every((token) => haystack.includes(token));
     });
-  }, [parts, query]);
+  }, [parts, query, filters]);
 
   const totalUnits = parts.reduce(
     (sum, part) => sum + Number(part.quantity || 0),
@@ -108,6 +117,15 @@ export default function SparePartsPanel({ access }) {
     (sum, part) =>
       sum + Number(part.quantity || 0) * Number(part.unit_cost || 0),
     0,
+  );
+
+  const modelOptions = useMemo(
+    () => [...new Set(parts.map((part) => part.device_model).filter(Boolean))].sort(),
+    [parts],
+  );
+  const typeOptions = useMemo(
+    () => [...new Set(parts.map((part) => part.part_type).filter(Boolean))].sort(),
+    [parts],
   );
 
   function openEditor(part = null) {
@@ -183,45 +201,75 @@ export default function SparePartsPanel({ access }) {
       <div className="title">
         <div>
           <h2>Spare Parts</h2>
-          <p>Simple stock list for phone repair parts.</p>
+          <p>
+            {filtered.length} part {filtered.length === 1 ? "line" : "lines"} ·{" "}
+            {totalUnits} {totalUnits === 1 ? "unit" : "units"}
+            {financial ? ` · ${money(stockValue)} stock value` : ""}
+            {query ? " · matching your search" : ""}
+          </p>
         </div>
-        <div className="actions">
-          <button className="primary" type="button" onClick={() => openEditor()}>
-            ＋ Add Part
+
+        <div className="actions inventory-toolbar parts-inventory-toolbar">
+          <button
+            className="primary tool-button add-phone-button"
+            type="button"
+            onClick={() => openEditor()}
+          >
+            <span className="tool-icon" aria-hidden="true">＋</span>
+            <span>Add Part</span>
           </button>
         </div>
       </div>
 
-      <div className="cards spare-parts-summary">
-        <div className="card">
-          <span>Part Lines</span>
-          <strong>{parts.length}</strong>
-        </div>
-        <div className="card">
-          <span>Total Units</span>
-          <strong>{totalUnits}</strong>
-        </div>
-        {financial && (
-          <div className="card">
-            <span>Parts Stock Value</span>
-            <strong>{money(stockValue)}</strong>
-          </div>
-        )}
-      </div>
+      <label className="parts-search">
+        <span>Search inventory</span>
+        <input
+          type="search"
+          placeholder="Device, screen, battery, back glass, color or location"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </label>
 
-      <div className="spare-parts-toolbar">
+      <div className="filter-bar parts-filter-bar">
         <label>
-          <span>Search parts</span>
-          <input
-            type="search"
-            placeholder="iPhone 14 screen, battery, back glass…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          <span>Filter by Model</span>
+          <select
+            value={filters.model}
+            onChange={(e) => setFilters({ ...filters, model: e.target.value })}
+          >
+            <option value="">All</option>
+            {modelOptions.map((model) => (
+              <option key={model} value={model}>{model}</option>
+            ))}
+          </select>
         </label>
-        <div className="spare-parts-count">
-          {filtered.length} {filtered.length === 1 ? "item" : "items"}
-        </div>
+
+        <label>
+          <span>Filter by Part</span>
+          <select
+            value={filters.partType}
+            onChange={(e) => setFilters({ ...filters, partType: e.target.value })}
+          >
+            <option value="">All</option>
+            {typeOptions.map((partType) => (
+              <option key={partType} value={partType}>{partType}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>Filter by Quality</span>
+          <select
+            value={filters.quality}
+            onChange={(e) => setFilters({ ...filters, quality: e.target.value })}
+          >
+            <option value="">All</option>
+            {qualities.map((quality) => (
+              <option key={quality} value={quality}>{quality}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {error && (
@@ -229,64 +277,72 @@ export default function SparePartsPanel({ access }) {
           {error}
         </p>
       )}
-      {notice && <p className="notice">{notice}</p>}
+      {notice && <p className="notice spare-parts-notice">{notice}</p>}
 
       {loading ? (
         <p className="empty">Loading spare parts…</p>
       ) : filtered.length ? (
-        <div className="table spare-parts-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Device</th>
-                <th>Part</th>
-                <th>Quality</th>
-                <th>Color</th>
-                <th>Qty</th>
-                {financial && <th>Unit Cost</th>}
-                <th>Location</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((part) => (
-                <tr key={part.id}>
-                  <td><strong>{part.device_model}</strong></td>
-                  <td>{part.part_type}</td>
-                  <td>{part.quality || "—"}</td>
-                  <td>{part.color || "—"}</td>
-                  <td>
-                    <span className={"spare-part-qty" + (Number(part.quantity) === 0 ? " empty" : "")}>
-                      {part.quantity}
-                    </span>
-                  </td>
-                  {financial && <td>{money(part.unit_cost)}</td>}
-                  <td>{part.storage_location || "—"}</td>
-                  <td>
-                    <div className="actions spare-part-actions">
-                      <button type="button" onClick={() => openEditor(part)}>
-                        Edit
-                      </button>
-                      {canDelete && (
-                        <button
-                          className="danger"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => deletePart(part)}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div
+          className={
+            "inventory-table spare-parts-inventory" +
+            (financial ? " financial" : "")
+          }
+        >
+          <div className="inventory-row inventory-head" aria-hidden="true">
+            <span>Device</span>
+            <span>Part</span>
+            <span>Quality</span>
+            <span>Color</span>
+            <span>Qty</span>
+            {financial && <span>Unit Cost</span>}
+            <span>Location</span>
+            <span>Actions</span>
+          </div>
+
+          {filtered.map((part) => (
+            <article className="inventory-row spare-inventory-row" key={part.id}>
+              <strong data-label="Device">{part.device_model}</strong>
+              <span data-label="Part">{part.part_type}</span>
+              <span data-label="Quality">{part.quality || "—"}</span>
+              <span data-label="Color">{part.color || "—"}</span>
+              <span data-label="Quantity">
+                <span
+                  className={
+                    "spare-part-qty" +
+                    (Number(part.quantity) === 0 ? " empty" : "")
+                  }
+                >
+                  {part.quantity}
+                </span>
+              </span>
+              {financial && (
+                <span data-label="Unit Cost">{money(part.unit_cost)}</span>
+              )}
+              <span data-label="Location">{part.storage_location || "—"}</span>
+
+              <div className="actions spare-part-actions">
+                <button type="button" onClick={() => openEditor(part)}>
+                  Edit
+                </button>
+                {canDelete && (
+                  <button
+                    className="danger"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => deletePart(part)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
         </div>
       ) : (
         <p className="empty">
-          {query ? "No spare parts match your search." : "No spare parts added yet."}
+          {query || filters.model || filters.partType || filters.quality
+            ? "No spare parts match your search or filters."
+            : "No spare parts added yet."}
         </p>
       )}
 
