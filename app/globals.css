@@ -3805,3 +3805,76 @@ footer {
 .imei-inline-error button {
   margin-left: auto;
 }
+
+
+/* Secure IMEI provider settings */
+.imei-provider-settings .title {
+  align-items: flex-start;
+}
+
+.provider-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.provider-status.connected {
+  color: #0f6841;
+  background: rgba(20, 116, 71, 0.1);
+  border: 1px solid rgba(20, 116, 71, 0.18);
+}
+
+.provider-status.disconnected {
+  color: #8a4b14;
+  background: rgba(180, 105, 24, 0.08);
+  border: 1px solid rgba(180, 105, 24, 0.16);
+}
+
+.provider-info-card,
+.provider-security-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(21, 62, 53, 0.1);
+  background: rgba(21, 62, 53, 0.035);
+}
+
+.provider-info-card div,
+.provider-security-note {
+  min-width: 0;
+}
+
+.provider-info-card strong,
+.provider-info-card span,
+.provider-security-note strong,
+.provider-security-note span {
+  display: block;
+}
+
+.provider-info-card span,
+.provider-security-note span {
+  margin-top: 4px;
+  color: var(--muted, #677a74);
+}
+
+.provider-settings-form {
+  margin-top: 18px;
+}
+
+.provider-save-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.provider-security-note {
+  justify-content: flex-start;
+}
