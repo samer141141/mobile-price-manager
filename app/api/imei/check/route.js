@@ -79,8 +79,9 @@ export async function POST(request) {
     if (!token) {
       return Response.json(
         {
-          error: "IMEI checking is ready in Lager iPhone but the provider API token is not configured yet.",
+          error: "Live IMEI provider is not connected yet. The button is working, but blacklist / SIM lock / Find My data requires an API key.",
           code: "IMEI_API_NOT_CONFIGURED",
+          setup_url: "https://imeicheck.net/promo-api",
         },
         { status: 503 },
       );
