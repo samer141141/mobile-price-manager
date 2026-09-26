@@ -123,20 +123,26 @@ const AD_PLATFORM_URLS = {
 async function requestImeiCheck(imei) {
   const cleaned = String(imei || "").replace(/\D/g, "");
   if (!/^\d{15}$/.test(cleaned)) throw new Error("IMEI must contain exactly 15 digits.");
-  const response = await fetch("/api/imei/check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ imei: cleaned }),
-    cache: "no-store",
+  if (!supabase) throw new Error("Supabase is not connected.");
+
+  const { data, error } = await supabase.functions.invoke("imei-check", {
+    body: { imei: cleaned },
   });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(body?.error || "IMEI check failed.");
-    error.code = body?.code || "";
-    error.setupUrl = body?.setup_url || "";
-    throw error;
+
+  if (error) {
+    let body = data || {};
+    try {
+      if (error.context && typeof error.context.json === "function") {
+        body = await error.context.json();
+      }
+    } catch {}
+    const failure = new Error(body?.error || error.message || "IMEI check failed.");
+    failure.code = body?.code || "";
+    failure.setupUrl = body?.setup_url || "";
+    throw failure;
   }
-  return body;
+
+  return data;
 }
 
 function imeiTone(value) {
@@ -319,6 +325,12 @@ export default function Home() {
     [purchaseImeiLoading, setPurchaseImeiLoading] = useState(false),
     [purchaseImeiError, setPurchaseImeiError] = useState(null),
     [imeiCheckingId, setImeiCheckingId] = useState(null),
+    [imeiProvider, setImeiProvider] = useState({
+      token: "",
+      serviceId: 1,
+      status: null,
+      loading: false,
+    }),
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
     [adBuilder, setAdBuilder] = useState(null),
@@ -793,6 +805,45 @@ export default function Home() {
     }
   }
 
+  async function loadImeiProviderStatus() {
+    setImeiProvider((current) => ({ ...current, loading: true }));
+    try {
+      const status = await rpc("lager_imei_provider_status");
+      setImeiProvider((current) => ({
+        ...current,
+        loading: false,
+        status,
+        serviceId: Number(status?.serviceId || current.serviceId || 1),
+      }));
+    } catch (e) {
+      setImeiProvider((current) => ({ ...current, loading: false }));
+      setError(e.message);
+    }
+  }
+
+  async function saveImeiProvider(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    setImeiProvider((current) => ({ ...current, loading: true }));
+    try {
+      const status = await rpc("lager_set_imei_provider", {
+        provider_token: imeiProvider.token,
+        provider_service_id: Number(imeiProvider.serviceId || 1),
+      });
+      setImeiProvider((current) => ({
+        ...current,
+        token: "",
+        loading: false,
+        status,
+      }));
+      setNotice("IMEI provider connected securely. IMEI Check is ready.");
+    } catch (e) {
+      setImeiProvider((current) => ({ ...current, loading: false }));
+      setError(e.message);
+    }
+  }
+
   async function exportPhones() {
     setBusy(true);
     setError("");
@@ -923,7 +974,10 @@ export default function Home() {
                 ...(financial ? [["insights", "Insights", "Insights"]] : []),
                 ["ads", "Ad Center", "Ads"],
                 ...(access.role === "admin"
-                  ? [["team", "Team Permissions", "Team"]]
+                  ? [
+                      ["team", "Team Permissions", "Team"],
+                      ["settings", "Settings", "Settings"],
+                    ]
                   : []),
               ].map(([key, label, mobileLabel]) => (
                 <button
@@ -937,6 +991,7 @@ export default function Home() {
                       rpc("lager_members")
                         .then(setMembers)
                         .catch((e) => setError(e.message));
+                    if (key === "settings") loadImeiProviderStatus();
                   }}
                 >
                   <span className="nav-label-full">{label}</span>
@@ -1762,6 +1817,94 @@ export default function Home() {
                 setNotice={setNotice}
                 setError={setError}
               />
+            )}
+            {tab === "settings" && access.role === "admin" && (
+              <section className="panel imei-provider-settings">
+                <div className="title">
+                  <div>
+                    <span className="section-kicker">SECURE INTEGRATION</span>
+                    <h2>IMEI Provider Settings</h2>
+                    <p>
+                      Connect IMEIcheck.net once. The API token is encrypted in Supabase Vault and is never stored in the browser.
+                    </p>
+                  </div>
+                  <span className={
+                    "provider-status " +
+                    (imeiProvider.status?.configured ? "connected" : "disconnected")
+                  }>
+                    {imeiProvider.status?.configured ? "Connected" : "Not connected"}
+                  </span>
+                </div>
+
+                <div className="provider-info-card">
+                  <div>
+                    <strong>IMEIcheck.net</strong>
+                    <span>
+                      Apple model · SIM lock · Find My · Lost Mode · block status · warranty
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.open(
+                        "https://imeicheck.net/promo-api",
+                        "_blank",
+                        "noopener,noreferrer",
+                      )
+                    }
+                  >
+                    Get API Token
+                  </button>
+                </div>
+
+                <form className="grid provider-settings-form" onSubmit={saveImeiProvider}>
+                  <label>
+                    <span>API Token</span>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      placeholder={imeiProvider.status?.configured ? "Enter a new token only to replace it" : "Paste IMEIcheck.net API token"}
+                      value={imeiProvider.token}
+                      onChange={(e) =>
+                        setImeiProvider({ ...imeiProvider, token: e.target.value })
+                      }
+                      required
+                    />
+                  </label>
+                  <Field
+                    label="Service ID"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={imeiProvider.serviceId}
+                    onChange={(v) =>
+                      setImeiProvider({ ...imeiProvider, serviceId: v })
+                    }
+                  />
+                  <div className="actions provider-save-actions">
+                    <button
+                      type="button"
+                      disabled={imeiProvider.loading}
+                      onClick={loadImeiProviderStatus}
+                    >
+                      Refresh Status
+                    </button>
+                    <button
+                      className="primary"
+                      disabled={imeiProvider.loading || !imeiProvider.token.trim()}
+                    >
+                      {imeiProvider.loading ? "Saving…" : "Save Secure Connection"}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="provider-security-note">
+                  <strong>Secure storage</strong>
+                  <span>
+                    Token is stored encrypted in Supabase Vault. Lager only receives the IMEI result, never the token.
+                  </span>
+                </div>
+              </section>
             )}
             {tab === "team" && access.role === "admin" && (
               <section className="panel">
