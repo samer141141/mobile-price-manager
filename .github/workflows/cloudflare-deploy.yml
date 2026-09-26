@@ -37,10 +37,12 @@ jobs:
           for i in $(seq 1 10); do
             root_code=$(curl -L -sS -o /tmp/root.html -w "%{http_code}" --max-time 20 "https://lager-iphone.samerabouamra.workers.dev/" || true)
             compare_code=$(curl -L -sS -o /tmp/compare.json -w "%{http_code}" --max-time 30 "https://lager-iphone.samerabouamra.workers.dev/api/market/compare?model=iPhone%2014&storage=128" || true)
+            imei_code=$(curl -L -sS -o /tmp/imei.json -w "%{http_code}" --max-time 20 -X POST "https://lager-iphone.samerabouamra.workers.dev/api/imei/free" -H "Content-Type: application/json" --data '{"imei":"490154203237518"}' || true)
             tradera_status=$(jq -r '.sources[]? | select(.source=="Tradera") | .status' /tmp/compare.json 2>/dev/null | head -1 || true)
             tradera_count=$(jq -r '.sources[]? | select(.source=="Tradera") | .count' /tmp/compare.json 2>/dev/null | head -1 || true)
-            echo "attempt=$i root_http=$root_code compare_http=$compare_code tradera_status=$tradera_status tradera_count=$tradera_count"
-            if [ "$root_code" = "200" ] && [ "$compare_code" = "200" ] && [ "$tradera_status" = "ok" ]; then
+            imei_mode=$(jq -r '.mode // empty' /tmp/imei.json 2>/dev/null | head -1 || true)
+            echo "attempt=$i root_http=$root_code compare_http=$compare_code imei_http=$imei_code imei_mode=$imei_mode tradera_status=$tradera_status tradera_count=$tradera_count"
+            if [ "$root_code" = "200" ] && [ "$compare_code" = "200" ] && [ "$imei_code" = "200" ] && [ "$imei_mode" = "free" ] && [ "$tradera_status" = "ok" ]; then
               exit 0
             fi
             sleep 5
