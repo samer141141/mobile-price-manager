@@ -244,14 +244,23 @@ function imeiPurchaseDecision(result) {
     /locked|lost/.test(icloud);
   const blacklistClean = /not blacklisted|clean|unblocked|not found/.test(blacklist);
   const activationClean = /^off$|disabled|inactive|unlocked|find my off/.test(fmi);
-  const simLocked = /locked/.test(sim) && !/unlocked/.test(sim);
+  const simUnlocked = /unlocked|no sim restrictions/.test(sim);
+  const simLocked = /locked/.test(sim) && !simUnlocked;
+
+  const checks = {
+    blacklist: blacklistClean || blacklistBad,
+    activation: activationClean || activationBad,
+    sim: simUnlocked || simLocked,
+  };
+  const verifiedCount = Object.values(checks).filter(Boolean).length;
 
   if (result?.luhn_valid === false) {
     return {
       level: "bad",
       icon: "⛔",
       title: "DO NOT BUY YET",
-      detail: "The IMEI number is invalid. Recheck the number on the phone before anything else.",
+      detail: "The IMEI number is invalid. Recheck the number on the phone first.",
+      verifiedCount,
     };
   }
 
@@ -260,71 +269,115 @@ function imeiPurchaseDecision(result) {
       level: "bad",
       icon: "⛔",
       title: "DO NOT BUY",
-      detail: "A critical IMEI risk was found: blacklist, lost mode or Activation Lock.",
+      detail: "Blacklist, Lost Mode or Activation Lock was confirmed.",
+      verifiedCount,
     };
   }
 
-  if (result?.mode === "live" && blacklistClean && activationClean && !simLocked) {
+  if (blacklistClean && activationClean && simUnlocked) {
     return {
       level: "good",
       icon: "✅",
-      title: "SAFE TO CONTINUE",
-      detail: "Critical IMEI checks are clear. Still confirm the phone matches the seller and physical device.",
+      title: "CLEAN TO BUY",
+      detail: "Blacklist is clean, Activation Lock is off and the phone is carrier-unlocked.",
+      verifiedCount: 3,
     };
   }
 
-  if (result?.mode === "live" && blacklistClean && activationClean && simLocked) {
+  if (blacklistClean && activationClean && simLocked) {
     return {
       level: "warn",
       icon: "⚠️",
-      title: "CHECK CARRIER LOCK",
-      detail: "Blacklist and Activation Lock look clear, but the SIM/carrier lock needs attention.",
+      title: "CARRIER LOCKED",
+      detail: "Blacklist and Activation Lock are clear, but the phone is SIM/carrier locked.",
+      verifiedCount,
     };
   }
 
   return {
     level: "warn",
     icon: "⚠️",
-    title: "CHECK BEFORE BUYING",
-    detail: "Free mode cannot confirm blacklist or Activation Lock automatically. Verify both before paying.",
+    title: verifiedCount + "/3 CHECKS VERIFIED",
+    detail: "Complete the real checks below. The app will not mark the phone clean until all three are verified.",
+    verifiedCount,
   };
 }
 
-function ImeiCheckPanel({ result, compact = false }) {
-  if (!result) return null;
+function ImeiCheckPanel({ result, compact = false, onResultChange }) {
+  const [workingResult, setWorkingResult] = useState(result);
 
-  const decision = imeiPurchaseDecision(result);
+  useEffect(() => {
+    setWorkingResult(result);
+  }, [result]);
+
+  if (!workingResult) return null;
+
+  const decision = imeiPurchaseDecision(workingResult);
   const device = [
-    result.device_name || result.model_description || "Model not identified",
-    result.storage_gb ? result.storage_gb + " GB" : "",
+    workingResult.device_name || workingResult.model_description || "Model not identified",
+    workingResult.storage_gb ? workingResult.storage_gb + " GB" : "",
   ].filter(Boolean).join(" · ");
-  const blacklist = criticalImeiStatus(result.blacklist, "blacklist");
-  const activation = criticalImeiStatus(result.fmi || result.activation, "activation");
-  const sim = criticalImeiStatus(result.sim_lock, "sim");
+  const blacklist = criticalImeiStatus(workingResult.blacklist, "blacklist");
+  const activation = criticalImeiStatus(
+    workingResult.fmi || workingResult.activation,
+    "activation",
+  );
+  const sim = criticalImeiStatus(workingResult.sim_lock, "sim");
+  const manual = workingResult.manual_verification || {};
 
   function copyImei() {
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(result.imei || "").catch(() => {});
+      navigator.clipboard.writeText(workingResult.imei || "").catch(() => {});
     }
   }
 
   function openSwappa() {
     copyImei();
     window.open(
-      result.swappa_url || "https://swappa.com/imei",
+      workingResult.swappa_url || "https://swappa.com/imei",
       "_blank",
       "noopener,noreferrer",
     );
+  }
+
+  function applyManualVerification(kind, value, source) {
+    const now = new Date().toISOString();
+    const next = {
+      ...workingResult,
+      manual_verification: {
+        ...(workingResult.manual_verification || {}),
+        [kind]: {
+          value,
+          source,
+          confirmed_at: now,
+        },
+      },
+      verification_updated_at: now,
+    };
+
+    if (kind === "blacklist") next.blacklist = value;
+    if (kind === "activation") {
+      next.fmi = value;
+      next.activation = value === "OFF" ? "Activation Lock Off" : "Activation Lock On";
+    }
+    if (kind === "sim") next.sim_lock = value;
+
+    setWorkingResult(next);
+    onResultChange?.(next);
+  }
+
+  function choiceClass(kind, value) {
+    return manual?.[kind]?.value === value ? "active" : "";
   }
 
   return (
     <div className={"imei-check-card" + (compact ? " compact" : "")}>
       <div className="imei-check-heading">
         <div>
-          <span className="section-kicker">IMEI PURCHASE CHECK</span>
-          <strong>{result.imei}</strong>
+          <span className="section-kicker">REAL PURCHASE CHECK</span>
+          <strong>{workingResult.imei}</strong>
         </div>
-        <small>{result.mode === "live" ? "Live verification" : "Free verification"}</small>
+        <small>{decision.verifiedCount}/3 critical checks verified</small>
       </div>
 
       <div className={"imei-buy-decision " + decision.level}>
@@ -342,8 +395,8 @@ function ImeiCheckPanel({ result, compact = false }) {
         </div>
         <div className="imei-check-item">
           <span>IMEI</span>
-          <strong className={"imei-status " + (result.luhn_valid ? "good" : "bad")}>
-            {result.luhn_valid ? "Valid number" : "Invalid number"}
+          <strong className={"imei-status " + (workingResult.luhn_valid ? "good" : "bad")}>
+            {workingResult.luhn_valid ? "Valid number" : "Invalid number"}
           </strong>
         </div>
         <div className="imei-check-item">
@@ -360,34 +413,166 @@ function ImeiCheckPanel({ result, compact = false }) {
         </div>
       </div>
 
-      {result.mode !== "live" && (
-        <div className="actions free-imei-actions">
-          <button type="button" className="primary" onClick={openSwappa}>
-            Check Blacklist
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              window.open(
-                result.apple_activation_lock_url || "https://support.apple.com/en-us/108794",
-                "_blank",
-                "noopener,noreferrer",
-              )
-            }
-          >
-            Activation Lock Checklist
-          </button>
-          <button type="button" onClick={copyImei}>
-            Copy IMEI
-          </button>
+      {workingResult.mode !== "live" && (
+        <div className="imei-real-checks">
+          <article className="imei-real-check">
+            <div className="imei-real-check-head">
+              <div>
+                <span>1</span>
+                <div>
+                  <strong>Blacklist / Lost / Stolen</strong>
+                  <small>Run the free Swappa blacklist check, then record the result here.</small>
+                </div>
+              </div>
+              {manual.blacklist?.confirmed_at && <em>Confirmed</em>}
+            </div>
+            <div className="actions imei-real-actions">
+              <button type="button" className="primary" onClick={openSwappa}>
+                Open Blacklist Check
+              </button>
+              <button
+                type="button"
+                className={choiceClass("blacklist", "Clean")}
+                onClick={() =>
+                  applyManualVerification(
+                    "blacklist",
+                    "Clean",
+                    "Swappa blacklist result confirmed",
+                  )
+                }
+              >
+                ✓ Clean
+              </button>
+              <button
+                type="button"
+                className={"danger " + choiceClass("blacklist", "Blacklisted")}
+                onClick={() =>
+                  applyManualVerification(
+                    "blacklist",
+                    "Blacklisted",
+                    "Swappa blacklist result confirmed",
+                  )
+                }
+              >
+                ✕ Blocked
+              </button>
+            </div>
+          </article>
+
+          <article className="imei-real-check">
+            <div className="imei-real-check-head">
+              <div>
+                <span>2</span>
+                <div>
+                  <strong>Activation Lock / Find My</strong>
+                  <small>
+                    Erase/reset the iPhone and start setup. “Locked to Owner” means locked.
+                    If setup continues without the previous owner's Apple Account, mark Off.
+                  </small>
+                </div>
+              </div>
+              {manual.activation?.confirmed_at && <em>Confirmed</em>}
+            </div>
+            <div className="actions imei-real-actions">
+              <button
+                type="button"
+                onClick={() =>
+                  window.open(
+                    workingResult.apple_activation_lock_url ||
+                      "https://support.apple.com/en-us/108794",
+                    "_blank",
+                    "noopener,noreferrer",
+                  )
+                }
+              >
+                Apple Check Steps
+              </button>
+              <button
+                type="button"
+                className={choiceClass("activation", "OFF")}
+                onClick={() =>
+                  applyManualVerification(
+                    "activation",
+                    "OFF",
+                    "On-device Apple setup check",
+                  )
+                }
+              >
+                ✓ Lock Off
+              </button>
+              <button
+                type="button"
+                className={"danger " + choiceClass("activation", "ON")}
+                onClick={() =>
+                  applyManualVerification(
+                    "activation",
+                    "ON",
+                    "On-device Apple setup check",
+                  )
+                }
+              >
+                ✕ Locked to Owner
+              </button>
+            </div>
+          </article>
+
+          <article className="imei-real-check">
+            <div className="imei-real-check-head">
+              <div>
+                <span>3</span>
+                <div>
+                  <strong>SIM / Carrier Lock</strong>
+                  <small>
+                    On iPhone: Settings → General → About → Carrier Lock.
+                    “No SIM restrictions” means unlocked.
+                  </small>
+                </div>
+              </div>
+              {manual.sim?.confirmed_at && <em>Confirmed</em>}
+            </div>
+            <div className="actions imei-real-actions">
+              <button type="button" onClick={copyImei}>Copy IMEI</button>
+              <button
+                type="button"
+                className={choiceClass("sim", "Unlocked")}
+                onClick={() =>
+                  applyManualVerification(
+                    "sim",
+                    "Unlocked",
+                    "iPhone Carrier Lock field checked",
+                  )
+                }
+              >
+                ✓ Unlocked
+              </button>
+              <button
+                type="button"
+                className={"danger " + choiceClass("sim", "Locked")}
+                onClick={() =>
+                  applyManualVerification(
+                    "sim",
+                    "Locked",
+                    "iPhone Carrier Lock field checked",
+                  )
+                }
+              >
+                ✕ Locked
+              </button>
+            </div>
+          </article>
+
+          <p className="imei-confirm-note">
+            Confirm a result only after you actually check it. “CLEAN TO BUY” appears only when
+            blacklist is clean, Activation Lock is off and carrier lock is unlocked.
+          </p>
         </div>
       )}
 
       <div className="imei-check-meta">
-        <span>{result.provider || "IMEI check"}</span>
-        {result.refurbished === true && <span>Refurbished</span>}
-        {result.demo_unit === true && <span>Demo unit</span>}
-        {result.lost_mode === true && <span className="danger-text">Lost Mode</span>}
+        <span>{workingResult.provider || "IMEI check"}</span>
+        {workingResult.refurbished === true && <span>Refurbished</span>}
+        {workingResult.demo_unit === true && <span>Demo unit</span>}
+        {workingResult.lost_mode === true && <span className="danger-text">Lost Mode</span>}
       </div>
     </div>
   );
@@ -1010,6 +1195,46 @@ export default function Home() {
   }
 
 
+  async function saveStoredImeiVerification(phone, nextResult) {
+    if (!phone?.imei || !nextResult) return;
+    setError("");
+    try {
+      await rpc("lager_record_imei_check", {
+        device_imei: phone.imei,
+        check_result: nextResult,
+      });
+      setDetails((current) =>
+        current && String(current.id) === String(phone.id)
+          ? {
+              ...current,
+              imei_check: nextResult,
+              imei_checked_at: nextResult.verification_updated_at || new Date().toISOString(),
+            }
+          : current,
+      );
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              phones: (current.phones || []).map((item) =>
+                String(item.id) === String(phone.id)
+                  ? {
+                      ...item,
+                      imei_check: nextResult,
+                      imei_checked_at:
+                        nextResult.verification_updated_at || new Date().toISOString(),
+                    }
+                  : item,
+              ),
+            }
+          : current,
+      );
+      setNotice("IMEI verification saved.");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function exportPhones() {
     setBusy(true);
     setError("");
@@ -1505,7 +1730,10 @@ export default function Home() {
                   )}
                   {purchaseImeiResult && (
                     <>
-                      <ImeiCheckPanel result={purchaseImeiResult} />
+                      <ImeiCheckPanel
+                        result={purchaseImeiResult}
+                        onResultChange={setPurchaseImeiResult}
+                      />
                       <div className="actions imei-purchase-actions">
                         <button
                           type="button"
@@ -2196,7 +2424,21 @@ export default function Home() {
                 </div>
               )}
               {editor.imeiCheckResult && editor.imeiCheckedFor === editor.form.imei && (
-                <ImeiCheckPanel result={editor.imeiCheckResult} compact />
+                <ImeiCheckPanel
+                  result={editor.imeiCheckResult}
+                  compact
+                  onResultChange={(next) =>
+                    setEditor((current) =>
+                      current
+                        ? {
+                            ...current,
+                            imeiCheckResult: next,
+                            imeiCheckDirty: true,
+                          }
+                        : current,
+                    )
+                  }
+                />
               )}
             </div>
             <label className="wide">
@@ -2565,7 +2807,13 @@ export default function Home() {
                     <Detail label="Last updated" value={controlDate(details.updated_at)} />
                   </dl>
                   {details.imei_check ? (
-                    <ImeiCheckPanel result={details.imei_check} compact />
+                    <ImeiCheckPanel
+                      result={details.imei_check}
+                      compact
+                      onResultChange={(next) =>
+                        saveStoredImeiVerification(details, next)
+                      }
+                    />
                   ) : details.imei ? (
                     <div className="imei-not-checked">
                       <span>IMEI STATUS</span>
