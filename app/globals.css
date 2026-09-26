@@ -3778,3 +3778,30 @@ footer {
     padding: 13px;
   }
 }
+
+
+.imei-inline-error {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: 14px;
+  background: rgba(180, 35, 24, 0.055);
+}
+
+.imei-inline-error strong {
+  color: #b42318;
+}
+
+.imei-inline-error span {
+  flex: 1 1 360px;
+  color: #6c2c25;
+}
+
+.imei-inline-error button {
+  margin-left: auto;
+}
