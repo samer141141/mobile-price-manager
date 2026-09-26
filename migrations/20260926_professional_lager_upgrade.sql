@@ -320,3 +320,10 @@ grant execute on function public.lager_operations_state() to authenticated;
 grant execute on function public.lager_set_qc(text,text,text) to authenticated;
 grant execute on function public.lager_add_repair(text,text,text,text,integer,numeric,text) to authenticated;
 grant execute on function public.lager_complete_repair(text) to authenticated;
+
+-- Cover the operational joins used by the device workspace.
+create index if not exists repairs_phone_id_idx on public.repairs(phone_id);
+create index if not exists repairs_part_id_idx on public.repairs(part_id);
+create index if not exists lager_phone_qc_updated_by_idx on public.lager_phone_qc(updated_by);
+create index if not exists lager_sale_history_phone_id_idx on public.lager_sale_history(phone_id);
+create index if not exists lager_sale_history_sold_at_idx on public.lager_sale_history(sold_at desc);
