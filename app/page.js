@@ -140,6 +140,27 @@ async function requestImeiCheck(imei) {
     throw new Error("IMEI must contain exactly 15 digits.");
   }
 
+  const luhnValid = validImeiLuhn(cleaned);
+
+  // Prefer the secure live checker when it is configured. If it is not,
+  // fall back to the free local check without blocking the purchase workflow.
+  try {
+    const { data, error } = await supabase.functions.invoke("imei-check", {
+      body: { imei: cleaned },
+    });
+    if (!error && data && !data.error) {
+      return {
+        ...data,
+        imei: cleaned,
+        mode: "live",
+        luhn_valid: luhnValid,
+        checked_at: data.checked_at || new Date().toISOString(),
+      };
+    }
+  } catch {
+    // Free fallback below.
+  }
+
   const tac = cleaned.slice(0, 8);
   let model = null;
 
@@ -153,20 +174,20 @@ async function requestImeiCheck(imei) {
   return {
     imei: cleaned,
     tac,
-    provider: "Free local TAC database",
+    provider: "Free local check",
     mode: "free",
-    luhn_valid: validImeiLuhn(cleaned),
+    luhn_valid: luhnValid,
     device_name: model,
     model_description: model,
     storage_gb: null,
-    blacklist: "Free manual check",
-    sim_lock: "Check on device/carrier",
-    fmi: "Check before purchase",
-    icloud: "Check before purchase",
+    blacklist: "Not verified",
+    sim_lock: "Not verified",
+    fmi: "Not verified",
+    icloud: "Not verified",
     carrier: "Unknown",
     country: "Unknown",
     warranty: "Unknown",
-    activation: "Manual verification required",
+    activation: "Not verified",
     refurbished: null,
     demo_unit: null,
     lost_mode: null,
@@ -174,106 +195,196 @@ async function requestImeiCheck(imei) {
     swappa_url: "https://swappa.com/imei",
     apple_activation_lock_url: "https://support.apple.com/en-us/108794",
     note:
-      "Device identification is local and free. Blacklist and Activation Lock must be confirmed using the free external checks before purchase.",
+      "Free mode verifies the IMEI format and identifies the model when available. Blacklist and Activation Lock still require verification.",
   };
 }
 
 function imeiTone(value) {
-  const v = String(value || "").toLowerCase();
-  if (["clean", "unlocked", "off"].some((word) => v === word || v.includes(word))) return "good";
-  if (["blacklist", "blacklisted", "locked", "on", "stolen", "lost"].some((word) => v === word || v.includes(word))) return "bad";
+  const v = String(value || "").trim().toLowerCase();
+  if (!v || /unknown|not verified|manual|check before/i.test(v)) return "neutral";
+  if (/not blacklisted|clean|unblocked|unlocked|^off$|disabled|inactive/.test(v)) return "good";
+  if (/blacklisted|blacklist|blocked|stolen|lost|locked|^on$|enabled|active/.test(v)) return "bad";
   return "neutral";
+}
+
+function criticalImeiStatus(value, type) {
+  const raw = String(value || "").trim();
+  const v = raw.toLowerCase();
+  if (!raw || /unknown|not verified|manual|check before/i.test(v)) {
+    return ["Not verified", "neutral"];
+  }
+
+  if (type === "blacklist") {
+    if (/not blacklisted|clean|unblocked|not found/.test(v)) return ["Clean", "good"];
+    if (/blacklisted|blacklist|blocked|stolen|lost|reported/.test(v)) return ["FLAGGED", "bad"];
+  }
+
+  if (type === "activation") {
+    if (/^off$|disabled|inactive|unlocked|find my off/.test(v)) return ["Off", "good"];
+    if (/^on$|enabled|active|locked|activation lock|locked to owner/.test(v)) return ["ON / Locked", "bad"];
+  }
+
+  if (type === "sim") {
+    if (/unlocked|no sim restrictions/.test(v)) return ["Unlocked", "good"];
+    if (/locked/.test(v)) return ["Locked", "bad"];
+  }
+
+  return [raw, imeiTone(raw)];
+}
+
+function imeiPurchaseDecision(result) {
+  const blacklist = String(result?.blacklist || "").toLowerCase();
+  const fmi = String(result?.fmi || result?.activation || "").toLowerCase();
+  const icloud = String(result?.icloud || "").toLowerCase();
+  const sim = String(result?.sim_lock || "").toLowerCase();
+
+  const blacklistBad = /blacklisted|blocked|stolen|lost|reported/.test(blacklist);
+  const activationBad =
+    /locked to owner|activation lock|^on$|enabled|active|locked/.test(fmi) ||
+    /locked|lost/.test(icloud);
+  const blacklistClean = /not blacklisted|clean|unblocked|not found/.test(blacklist);
+  const activationClean = /^off$|disabled|inactive|unlocked|find my off/.test(fmi);
+  const simLocked = /locked/.test(sim) && !/unlocked/.test(sim);
+
+  if (result?.luhn_valid === false) {
+    return {
+      level: "bad",
+      icon: "⛔",
+      title: "DO NOT BUY YET",
+      detail: "The IMEI number is invalid. Recheck the number on the phone before anything else.",
+    };
+  }
+
+  if (blacklistBad || activationBad || result?.lost_mode === true) {
+    return {
+      level: "bad",
+      icon: "⛔",
+      title: "DO NOT BUY",
+      detail: "A critical IMEI risk was found: blacklist, lost mode or Activation Lock.",
+    };
+  }
+
+  if (result?.mode === "live" && blacklistClean && activationClean && !simLocked) {
+    return {
+      level: "good",
+      icon: "✅",
+      title: "SAFE TO CONTINUE",
+      detail: "Critical IMEI checks are clear. Still confirm the phone matches the seller and physical device.",
+    };
+  }
+
+  if (result?.mode === "live" && blacklistClean && activationClean && simLocked) {
+    return {
+      level: "warn",
+      icon: "⚠️",
+      title: "CHECK CARRIER LOCK",
+      detail: "Blacklist and Activation Lock look clear, but the SIM/carrier lock needs attention.",
+    };
+  }
+
+  return {
+    level: "warn",
+    icon: "⚠️",
+    title: "CHECK BEFORE BUYING",
+    detail: "Free mode cannot confirm blacklist or Activation Lock automatically. Verify both before paying.",
+  };
 }
 
 function ImeiCheckPanel({ result, compact = false }) {
   if (!result) return null;
-  const isFree = result.mode === "free";
-  const rows = isFree
-    ? [
-        ["Device", result.device_name || "Not found in local Apple TAC database", "neutral"],
-        ["TAC", result.tac || "Unknown", "neutral"],
-        ["IMEI checksum", result.luhn_valid ? "Valid" : "Invalid — recheck the IMEI", result.luhn_valid ? "good" : "bad"],
-        ["Blacklist", "Use free Swappa check", "neutral"],
-        ["Activation Lock", "Verify before purchase", "neutral"],
-      ]
-    : [
-        ["Device", result.device_name || result.model_description || "Unknown", "neutral"],
-        ["Blacklist", result.blacklist || "Unknown", imeiTone(result.blacklist)],
-        ["SIM Lock", result.sim_lock || "Unknown", imeiTone(result.sim_lock)],
-        ["Find My / Activation Lock", result.fmi || "Unknown", imeiTone(result.fmi)],
-        ["iCloud", result.icloud || "Unknown", imeiTone(result.icloud)],
-        ["Carrier", result.carrier || "Unknown", "neutral"],
-        ["Country", result.country || "Unknown", "neutral"],
-        ["Warranty", result.warranty || "Unknown", "neutral"],
-      ];
+
+  const decision = imeiPurchaseDecision(result);
+  const device = [
+    result.device_name || result.model_description || "Model not identified",
+    result.storage_gb ? result.storage_gb + " GB" : "",
+  ].filter(Boolean).join(" · ");
+  const blacklist = criticalImeiStatus(result.blacklist, "blacklist");
+  const activation = criticalImeiStatus(result.fmi || result.activation, "activation");
+  const sim = criticalImeiStatus(result.sim_lock, "sim");
+
+  function copyImei() {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(result.imei || "").catch(() => {});
+    }
+  }
 
   function openSwappa() {
+    copyImei();
     window.open(
       result.swappa_url || "https://swappa.com/imei",
       "_blank",
       "noopener,noreferrer",
     );
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(result.imei || "").catch(() => {});
-    }
   }
 
   return (
     <div className={"imei-check-card" + (compact ? " compact" : "")}>
       <div className="imei-check-heading">
         <div>
-          <span className="section-kicker">{isFree ? "FREE IMEI CHECK" : "IMEI CHECK"}</span>
+          <span className="section-kicker">IMEI PURCHASE CHECK</span>
           <strong>{result.imei}</strong>
         </div>
-        <small>{result.checked_at ? new Date(result.checked_at).toLocaleString("sv-SE") : ""}</small>
+        <small>{result.mode === "live" ? "Live verification" : "Free verification"}</small>
       </div>
-      <div className="imei-check-grid">
-        {rows.map(([label, value, tone]) => (
-          <div className="imei-check-item" key={label}>
-            <span>{label}</span>
-            <strong className={"imei-status " + tone}>{String(value)}</strong>
-          </div>
-        ))}
+
+      <div className={"imei-buy-decision " + decision.level}>
+        <span className="imei-buy-icon">{decision.icon}</span>
+        <div>
+          <strong>{decision.title}</strong>
+          <p>{decision.detail}</p>
+        </div>
       </div>
-      {isFree && (
-        <>
-          <div className="actions free-imei-actions">
-            <button type="button" className="primary" onClick={openSwappa}>
-              Copy IMEI + Open Free Blacklist Check
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                window.open(
-                  result.device_lookup_url || "https://devicedecoded.com/tools/check-imei",
-                  "_blank",
-                  "noopener,noreferrer",
-                )
-              }
-            >
-              Open Free Device Lookup
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                window.open(
-                  result.apple_activation_lock_url || "https://support.apple.com/en-us/108794",
-                  "_blank",
-                  "noopener,noreferrer",
-                )
-              }
-            >
-              Activation Lock Guide
-            </button>
-          </div>
-          <p className="imei-free-note">
-            Model lookup is local and free. For blacklist status, the IMEI is copied so you can paste it into Swappa's free checker.
-            Always verify that the iPhone is not “Locked to Owner” before buying.
-          </p>
-        </>
+
+      <div className="imei-check-grid imei-critical-grid">
+        <div className="imei-check-item">
+          <span>Device</span>
+          <strong>{device}</strong>
+        </div>
+        <div className="imei-check-item">
+          <span>IMEI</span>
+          <strong className={"imei-status " + (result.luhn_valid ? "good" : "bad")}>
+            {result.luhn_valid ? "Valid number" : "Invalid number"}
+          </strong>
+        </div>
+        <div className="imei-check-item">
+          <span>Blacklist / Lost</span>
+          <strong className={"imei-status " + blacklist[1]}>{blacklist[0]}</strong>
+        </div>
+        <div className="imei-check-item">
+          <span>Find My / Activation Lock</span>
+          <strong className={"imei-status " + activation[1]}>{activation[0]}</strong>
+        </div>
+        <div className="imei-check-item">
+          <span>SIM / Carrier Lock</span>
+          <strong className={"imei-status " + sim[1]}>{sim[0]}</strong>
+        </div>
+      </div>
+
+      {result.mode !== "live" && (
+        <div className="actions free-imei-actions">
+          <button type="button" className="primary" onClick={openSwappa}>
+            Check Blacklist
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              window.open(
+                result.apple_activation_lock_url || "https://support.apple.com/en-us/108794",
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
+          >
+            Activation Lock Checklist
+          </button>
+          <button type="button" onClick={copyImei}>
+            Copy IMEI
+          </button>
+        </div>
       )}
+
       <div className="imei-check-meta">
-        <span>{result.provider || "IMEI provider"}</span>
+        <span>{result.provider || "IMEI check"}</span>
         {result.refurbished === true && <span>Refurbished</span>}
         {result.demo_unit === true && <span>Demo unit</span>}
         {result.lost_mode === true && <span className="danger-text">Lost Mode</span>}
@@ -814,7 +925,11 @@ export default function Home() {
         model: guessedModel || current.model,
         storage_gb: result.storage_gb || current.storage_gb,
       }));
-      setNotice("IMEI check completed. Model/storage were filled when available.");
+      setNotice(
+        result.mode === "live"
+          ? "IMEI verification completed."
+          : "IMEI checked. Verify blacklist and Activation Lock before paying.",
+      );
     } catch (e) {
       setPurchaseImeiResult(null);
       setPurchaseImeiError({
@@ -852,7 +967,11 @@ export default function Home() {
             }
           : current,
       );
-      setNotice("IMEI check completed.");
+      setNotice(
+        result.mode === "live"
+          ? "IMEI verification completed."
+          : "IMEI checked. Blacklist and Activation Lock still need verification.",
+      );
     } catch (e) {
       setEditor((current) =>
         current
@@ -1375,7 +1494,7 @@ export default function Home() {
                       disabled={purchaseImeiLoading}
                       onClick={runPurchaseImeiCheck}
                     >
-                      {purchaseImeiLoading ? "Checking IMEI… FREE" : "Free IMEI Check Before Purchase"}
+                      {purchaseImeiLoading ? "Checking IMEI…" : "Check IMEI Before Purchase"}
                     </button>
                   </div>
                   {purchaseImeiError && (
@@ -2066,9 +2185,9 @@ export default function Home() {
                   disabled={editor.imeiCheckLoading}
                   onClick={runEditorImeiCheck}
                 >
-                  {editor.imeiCheckLoading ? "Checking IMEI… FREE" : "Free IMEI Check"}
+                  {editor.imeiCheckLoading ? "Checking IMEI…" : "Check IMEI"}
                 </button>
-                <span>Free model lookup · free blacklist link · Activation Lock check</span>
+                <span>Shows only the checks that matter before you buy.</span>
               </div>
               {editor.imeiCheckError && (
                 <div className="imei-inline-error" role="alert">
