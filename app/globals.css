@@ -3700,6 +3700,101 @@ footer {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+
+.imei-real-checks {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.imei-real-check {
+  padding: 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(21, 62, 53, 0.1);
+  background: rgba(21, 62, 53, 0.025);
+}
+
+.imei-real-check-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.imei-real-check-head > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.imei-real-check-head > div > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #0f513f;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.imei-real-check-head strong {
+  display: block;
+  font-size: 14px;
+}
+
+.imei-real-check-head small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted, #61746f);
+  line-height: 1.45;
+}
+
+.imei-real-check-head em {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(20, 116, 71, 0.08);
+  color: #147447;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.imei-real-actions {
+  margin-top: 11px;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.imei-real-actions button.active {
+  border-color: rgba(20, 116, 71, 0.42);
+  background: rgba(20, 116, 71, 0.11);
+  color: #0f6b40;
+  box-shadow: inset 0 0 0 1px rgba(20, 116, 71, 0.05);
+}
+
+.imei-real-actions button.danger.active {
+  border-color: rgba(180, 35, 24, 0.4);
+  background: rgba(180, 35, 24, 0.1);
+  color: #b42318;
+}
+
+.imei-confirm-note {
+  margin: 2px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(183, 117, 0, 0.065);
+  border: 1px solid rgba(183, 117, 0, 0.16);
+  color: #73500b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .imei-check-heading,
 .imei-check-meta,
 .imei-editor-actions {
@@ -3960,4 +4055,20 @@ footer {
   color: var(--muted, #61746f);
   font-size: 13px;
   line-height: 1.5;
+}
+
+
+@media (max-width: 620px) {
+  .imei-real-check-head {
+    flex-direction: column;
+  }
+
+  .imei-real-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .imei-real-actions button:first-child {
+    grid-column: 1 / -1;
+  }
 }
