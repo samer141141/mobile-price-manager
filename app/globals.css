@@ -3640,6 +3640,66 @@ footer {
   box-shadow: none;
 }
 
+
+.imei-buy-decision {
+  margin-top: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+}
+
+.imei-buy-decision.good {
+  background: rgba(20, 116, 71, 0.07);
+  border-color: rgba(20, 116, 71, 0.18);
+}
+
+.imei-buy-decision.warn {
+  background: rgba(183, 117, 0, 0.075);
+  border-color: rgba(183, 117, 0, 0.2);
+}
+
+.imei-buy-decision.bad {
+  background: rgba(180, 35, 24, 0.07);
+  border-color: rgba(180, 35, 24, 0.2);
+}
+
+.imei-buy-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.imei-buy-decision strong {
+  display: block;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.imei-buy-decision.good strong {
+  color: #147447;
+}
+
+.imei-buy-decision.warn strong {
+  color: #8a5b00;
+}
+
+.imei-buy-decision.bad strong {
+  color: #b42318;
+}
+
+.imei-buy-decision p {
+  margin: 4px 0 0;
+  color: var(--muted, #61746f);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.imei-critical-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .imei-check-heading,
 .imei-check-meta,
 .imei-editor-actions {
@@ -3764,7 +3824,8 @@ footer {
 }
 
 @media (max-width: 1050px) {
-  .imei-check-grid {
+  .imei-check-grid,
+  .imei-critical-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
