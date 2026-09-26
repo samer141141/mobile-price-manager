@@ -4072,3 +4072,43 @@ footer {
     grid-column: 1 / -1;
   }
 }
+
+
+/* Professional sale and repair controls */
+.sale-profit-preview {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid rgba(23, 62, 52, 0.16);
+  border-radius: 16px;
+  background: rgba(23, 62, 52, 0.045);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.sale-profit-preview > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.sale-profit-preview span,
+.sale-profit-preview small {
+  color: var(--muted, #64748b);
+}
+.sale-profit-preview strong {
+  font-size: 1.05rem;
+}
+.sale-profit-preview.positive {
+  border-color: rgba(16, 132, 91, 0.28);
+}
+.sale-profit-preview.negative {
+  border-color: rgba(190, 53, 53, 0.28);
+}
+.sale-profit-preview > small {
+  grid-column: 1 / -1;
+  line-height: 1.45;
+}
+@media (max-width: 760px) {
+  .sale-profit-preview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

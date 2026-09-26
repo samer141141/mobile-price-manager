@@ -297,8 +297,10 @@ export default function OperationsCenter({
   onPhotoCountChange,
   setNotice,
   setError,
+  onRefresh,
 }) {
   const [ops, setOps] = useState({});
+  const [parts, setParts] = useState([]);
   const [audit, setAudit] = useState([]);
   const [snapshotStatus, setSnapshotStatus] = useState(null);
   const [query, setQuery] = useState("");
@@ -315,7 +317,9 @@ export default function OperationsCenter({
   const [purchaseMarketLoading, setPurchaseMarketLoading] = useState(false);
   const [repair, setRepair] = useState({
     description: "",
+    partId: "",
     part: "",
+    quantity: 1,
     cost: "",
     technician: "",
   });
@@ -327,6 +331,10 @@ export default function OperationsCenter({
     orderRef: "",
     warrantyMonths: "3",
     price: "",
+    platformFee: "",
+    shippingCost: "",
+    taxMode: "Not set",
+    vatCost: "",
   });
   const [photos, setPhotos] = useState([]);
   const [scanStatus, setScanStatus] = useState("");
@@ -338,6 +346,43 @@ export default function OperationsCenter({
   const photoRef = useRef(null);
   const cameraPhotoRef = useRef(null);
   const threeURef = useRef(null);
+
+  async function loadCloudOperations() {
+    const [{ data: cloudOps, error: opsError }, { data: cloudParts, error: partsError }] =
+      await Promise.all([
+        supabase.rpc("lager_operations_state"),
+        supabase.rpc("lager_parts"),
+      ]);
+
+    if (opsError) throw opsError;
+
+    if (cloudOps && typeof cloudOps === "object") {
+      setOps((current) => {
+        const next = { ...current };
+        for (const [phoneId, cloud] of Object.entries(cloudOps)) {
+          const local = current[phoneId] || {};
+          const cloudTests = cloud?.tests || {};
+          const cloudRepairs = cloud?.repairs || [];
+          next[phoneId] = {
+            ...local,
+            ...cloud,
+            tests:
+              Object.keys(cloudTests).length > 0
+                ? cloudTests
+                : local.tests || {},
+            repairs:
+              cloudRepairs.length > 0
+                ? cloudRepairs
+                : local.repairs || [],
+          };
+        }
+        localStorage.setItem(OPS_KEY, JSON.stringify(next));
+        return next;
+      });
+    }
+
+    if (!partsError && Array.isArray(cloudParts)) setParts(cloudParts);
+  }
 
   useEffect(() => {
     setOps(readJson(OPS_KEY, {}));
@@ -353,6 +398,10 @@ export default function OperationsCenter({
     supabase.rpc("lager_snapshot_status").then(({ data }) => {
       if (data) setSnapshotStatus(data);
     }).catch(() => {});
+
+    loadCloudOperations().catch(() => {
+      // Keep the local operational cache as a fallback if cloud loading fails.
+    });
   }, []);
 
   // Open the requested phone directly when Operations is entered from a device.
@@ -393,11 +442,23 @@ export default function OperationsCenter({
             channel: cloudSale.sales_channel || current.channel,
             orderRef: cloudSale.order_ref || "",
             warrantyMonths: String(cloudSale.warranty_months ?? current.warrantyMonths ?? 3),
+            platformFee: String(cloudSale.platform_fee ?? ""),
+            shippingCost: String(cloudSale.shipping_cost ?? ""),
+            taxMode: cloudSale.tax_mode || "Not set",
+            vatCost: String(cloudSale.vat_cost ?? ""),
           }
         : {}),
       ...(record.sale || {}),
     }));
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!selected?.id) return;
+    const current = (phones || []).find(
+      (phone) => String(phone.id) === String(selected.id),
+    );
+    if (current) setSelected(current);
+  }, [phones, selected?.id]);
 
   function persistOps(next) {
     setOps(next);
@@ -477,6 +538,36 @@ export default function OperationsCenter({
   const selectedSummary = selected ? workflowSummary(selected, ops) : null;
   const selectedRecord = selected ? ops[String(selected.id)] || {} : {};
   const testState = selectedSummary?.tests || { completed: 0, total: TEST_ITEMS.length, failed: 0, percent: 0 };
+  const salePreview = useMemo(() => {
+    if (!selected || !financial) return null;
+    const price = Number(saleForm.price || selected.selling_price || 0);
+    const purchaseCost = Number(selected.purchase_price || 0);
+    const repairCost = Number(selected.repair_cost || 0);
+    const otherCost = Number(selected.other_cost || 0);
+    const platformFee = Number(saleForm.platformFee || 0);
+    const shippingCost = Number(saleForm.shippingCost || 0);
+    const grossMargin = price - purchaseCost;
+
+    let vatCost = saleForm.vatCost === "" ? null : Number(saleForm.vatCost || 0);
+    if (vatCost == null) {
+      if (saleForm.taxMode === "VMB") vatCost = Math.max(grossMargin, 0) / 5;
+      else if (saleForm.taxMode === "Normal VAT") vatCost = price / 5;
+      else vatCost = 0;
+    }
+
+    const allInCost =
+      purchaseCost + repairCost + otherCost + platformFee + shippingCost + vatCost;
+    const netProfit = price - allInCost;
+    return {
+      price,
+      platformFee,
+      shippingCost,
+      vatCost,
+      allInCost,
+      netProfit,
+      marginPercent: price > 0 ? (netProfit / price) * 100 : 0,
+    };
+  }, [selected, saleForm, financial]);
 
   const purchaseAnalysis = useMemo(() => {
     if (!purchaseMarket?.market_summary) return null;
@@ -596,7 +687,7 @@ export default function OperationsCenter({
     }
   }
 
-  function updateTest(item, value) {
+  async function updateTest(item, value) {
     if (!selected) return;
     const record = ops[String(selected.id)] || {};
     const tests = { ...(record.tests || {}), [item]: value };
@@ -604,7 +695,18 @@ export default function OperationsCenter({
       tests,
       stage: value === "Fail" ? "Testing" : record.stage || "Testing",
     });
-    logAction("Device test", selected, item + ": " + value);
+
+    try {
+      const { error } = await supabase.rpc("lager_set_qc", {
+        phone_id: String(selected.id),
+        test_name: item,
+        test_result: value,
+      });
+      if (error) throw error;
+    } catch (e) {
+      setError("Could not sync the device test: " + e.message);
+      await loadCloudOperations().catch(() => {});
+    }
   }
 
   async function sendToRepair() {
@@ -645,26 +747,32 @@ export default function OperationsCenter({
 
   async function addRepair() {
     if (!selected || !repair.description.trim()) return;
-    const item = {
-      id: nowId("repair"),
-      description: repair.description.trim(),
-      part: repair.part.trim(),
-      cost: Number(repair.cost || 0),
-      technician: repair.technician.trim(),
-      startedAt: new Date().toISOString(),
-      completedAt: null,
-    };
-    const repairs = [...(selectedRecord.repairs || []), item];
-    patchOps(selected.id, { repairs, stage: "Repair" });
     try {
-      const patch = { status: "Repairing" };
-      if (financial && item.cost > 0) {
-        patch.repair_cost = Number(selected.repair_cost || 0) + item.cost;
-      }
-      await onSavePhone(selected, patch);
-      setRepair({ description: "", part: "", cost: "", technician: "" });
-      logAction("Repair added", selected, item.description + (item.cost ? " · " + money(item.cost) : ""));
-      setNotice("Repair added.");
+      const { error } = await supabase.rpc("lager_add_repair", {
+        phone_id: String(selected.id),
+        description: repair.description.trim(),
+        part_id: repair.partId || null,
+        manual_part: repair.part.trim() || null,
+        part_quantity: Number(repair.quantity || 1),
+        labor_cost: financial ? Number(repair.cost || 0) : 0,
+        technician: repair.technician.trim() || null,
+      });
+      if (error) throw error;
+
+      patchOps(selected.id, { stage: "Repair" });
+      setRepair({
+        description: "",
+        partId: "",
+        part: "",
+        quantity: 1,
+        cost: "",
+        technician: "",
+      });
+      await loadCloudOperations();
+      await onRefresh?.();
+      setNotice(
+        "Repair saved. Spare-part stock and repair cost were updated automatically.",
+      );
     } catch (e) {
       setError(e.message);
     }
@@ -672,14 +780,16 @@ export default function OperationsCenter({
 
   async function completeRepair(id) {
     if (!selected) return;
-    const repairs = (selectedRecord.repairs || []).map((r) =>
-      r.id === id ? { ...r, completedAt: new Date().toISOString() } : r,
-    );
-    patchOps(selected.id, { repairs, stage: "Testing" });
     try {
-      await onSavePhone(selected, { status: "In Stock" });
-      logAction("Repair completed", selected);
-      setNotice("Repair completed. Run the test checklist again.");
+      const { error } = await supabase.rpc("lager_complete_repair", {
+        repair_id: String(id),
+      });
+      if (error) throw error;
+
+      patchOps(selected.id, { stage: "Testing" });
+      await loadCloudOperations();
+      await onRefresh?.();
+      setNotice("Repair completed. Run the QC checklist again before listing.");
     } catch (e) {
       setError(e.message);
     }
@@ -810,9 +920,13 @@ export default function OperationsCenter({
         ["Contact", sale?.contact || "—"],
         ["Payment", sale?.payment || "—"],
         ["Sales channel", sale?.channel || "—"],
-        ["Order / reference", sale?.orderRef || "—"],
-        ["Price", money(sale?.price || phone.selling_price)],
-        ["Warranty", Number(sale?.warrantyMonths || 0) > 0 ? sale.warrantyMonths + " month(s)" : "No warranty"],
+        ["Order / reference", sale?.orderRef || sale?.order_ref || "—"],
+        ["Price", money(sale?.price || sale?.selling_price || phone.selling_price)],
+        ["Platform fee", money(sale?.platformFee ?? sale?.platform_fee ?? 0)],
+        ["Shipping", money(sale?.shippingCost ?? sale?.shipping_cost ?? 0)],
+        ["VAT / tax mode", sale?.taxMode || sale?.tax_mode || "Not set"],
+        ["VAT cost", money(sale?.vatCost ?? sale?.vat_cost ?? 0)],
+        ["Warranty", Number(sale?.warrantyMonths || sale?.warranty_months || 0) > 0 ? (sale?.warrantyMonths || sale?.warranty_months) + " month(s)" : "No warranty"],
       ];
       doc.setFontSize(10);
       for (const [label, value] of lines) {
@@ -868,6 +982,9 @@ export default function OperationsCenter({
           ["Purchase cost", money(accounting.purchaseCost)],
           ["Repair cost", money(accounting.repairCost)],
           ["Other cost", money(accounting.otherCost)],
+          ["Platform fees", money(accounting.platformFees)],
+          ["Shipping cost", money(accounting.shippingCost)],
+          ["VAT / VMB cost", money(accounting.vatCost)],
           ["Total cost", money(accounting.totalCost)],
           ["Realized profit", money(accounting.profit)],
         ];
@@ -890,6 +1007,9 @@ export default function OperationsCenter({
           ["Purchase cost", accounting.purchaseCost],
           ["Repair cost", accounting.repairCost],
           ["Other cost", accounting.otherCost],
+          ["Platform fees", accounting.platformFees],
+          ["Shipping cost", accounting.shippingCost],
+          ["VAT / VMB cost", accounting.vatCost],
           ["Total cost", accounting.totalCost],
           ["Realized profit", accounting.profit],
         ]);
@@ -1158,7 +1278,7 @@ export default function OperationsCenter({
             <div className="accounting-kpis">
               <div><span>Revenue</span><strong>{money(accounting.revenue)}</strong></div>
               <div><span>Total cost</span><strong>{money(accounting.totalCost)}</strong></div>
-              <div><span>Profit</span><strong>{money(accounting.profit)}</strong></div>
+              <div><span>Real net profit</span><strong>{money(accounting.profit)}</strong></div>
               <div><span>Units</span><strong>{accounting.units}</strong></div>
             </div>
             <div className="actions">
@@ -1449,13 +1569,45 @@ export default function OperationsCenter({
                     <span>Problem / work</span>
                     <input value={repair.description} onChange={(e) => setRepair({ ...repair, description: e.target.value })} placeholder="Battery replacement, screen, charging port…" />
                   </label>
-                  <label>
-                    <span>Part</span>
-                    <input value={repair.part} onChange={(e) => setRepair({ ...repair, part: e.target.value })} />
+                  <label className="wide">
+                    <span>Use spare part from Lager (optional)</span>
+                    <select
+                      value={repair.partId}
+                      onChange={(e) =>
+                        setRepair({ ...repair, partId: e.target.value, quantity: 1 })
+                      }
+                    >
+                      <option value="">No inventory part</option>
+                      {parts
+                        .filter((part) => Number(part.quantity || 0) > 0)
+                        .sort((a, b) => {
+                          const model = String(selected.model || "").toLowerCase();
+                          const aMatch = String(a.device_model || "").toLowerCase().includes(model) ? 0 : 1;
+                          const bMatch = String(b.device_model || "").toLowerCase().includes(model) ? 0 : 1;
+                          return aMatch - bMatch || String(a.device_model).localeCompare(String(b.device_model));
+                        })
+                        .map((part) => (
+                          <option key={part.id} value={part.id}>
+                            {part.device_model} · {part.part_type} · {part.quality} · {part.quantity} in stock
+                            {financial && part.unit_cost != null ? " · " + money(part.unit_cost) : ""}
+                          </option>
+                        ))}
+                    </select>
                   </label>
+                  {repair.partId ? (
+                    <label>
+                      <span>Quantity</span>
+                      <input type="number" min="1" max="99" value={repair.quantity} onChange={(e) => setRepair({ ...repair, quantity: e.target.value })} />
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Manual part / note</span>
+                      <input value={repair.part} onChange={(e) => setRepair({ ...repair, part: e.target.value })} placeholder="Battery, screen, back glass…" />
+                    </label>
+                  )}
                   {financial && (
                     <label>
-                      <span>Cost (SEK)</span>
+                      <span>Labor / other cost (SEK)</span>
                       <input type="number" min="0" value={repair.cost} onChange={(e) => setRepair({ ...repair, cost: e.target.value })} />
                     </label>
                   )}
@@ -1563,6 +1715,19 @@ export default function OperationsCenter({
                     </select>
                   </label>
                   <label><span>Order / reference</span><input value={saleForm.orderRef} onChange={(e) => setSaleForm({ ...saleForm, orderRef: e.target.value })} /></label>
+                  {financial && (
+                    <>
+                      <label><span>Platform fee (SEK)</span><input type="number" min="0" value={saleForm.platformFee} onChange={(e) => setSaleForm({ ...saleForm, platformFee: e.target.value })} /></label>
+                      <label><span>Shipping cost (SEK)</span><input type="number" min="0" value={saleForm.shippingCost} onChange={(e) => setSaleForm({ ...saleForm, shippingCost: e.target.value })} /></label>
+                      <label>
+                        <span>VAT / tax mode</span>
+                        <select value={saleForm.taxMode} onChange={(e) => setSaleForm({ ...saleForm, taxMode: e.target.value, vatCost: "" })}>
+                          {["Not set","VMB","Normal VAT","No VAT / Other"].map((x) => <option key={x}>{x}</option>)}
+                        </select>
+                      </label>
+                      <label><span>VAT cost override (optional)</span><input type="number" min="0" value={saleForm.vatCost} onChange={(e) => setSaleForm({ ...saleForm, vatCost: e.target.value })} placeholder="Auto when empty" /></label>
+                    </>
+                  )}
                   <label>
                     <span>Warranty</span>
                     <select value={saleForm.warrantyMonths} onChange={(e) => setSaleForm({ ...saleForm, warrantyMonths: e.target.value })}>
@@ -1572,6 +1737,15 @@ export default function OperationsCenter({
                     </select>
                   </label>
                 </div>
+                {salePreview && (
+                  <div className={"sale-profit-preview " + (salePreview.netProfit >= 0 ? "positive" : "negative")}>
+                    <div><span>All-in cost</span><strong>{money(salePreview.allInCost)}</strong></div>
+                    <div><span>VAT / VMB estimate</span><strong>{money(salePreview.vatCost)}</strong></div>
+                    <div><span>Real net profit</span><strong>{money(salePreview.netProfit)}</strong></div>
+                    <div><span>Net margin</span><strong>{salePreview.marginPercent.toFixed(1)}%</strong></div>
+                    <small>Tax mode is an accounting classification. Verify it before final bookkeeping.</small>
+                  </div>
+                )}
                 <button type="button" className="primary" onClick={saveSale}>Complete Sale</button>
               </div>
             )}
@@ -1579,7 +1753,7 @@ export default function OperationsCenter({
             {(panel === "receipt" || (panel === "sale" && String(selected.status).toLowerCase() === "sold")) && (
               <div className="receipt-panel">
                 <p>Create a simple sales receipt using the device details and saved buyer information.</p>
-                <button type="button" className="primary" onClick={() => generateReceipt(selected, selectedRecord.sale)}>Download Receipt PDF</button>
+                <button type="button" className="primary" onClick={() => generateReceipt(selected, selectedRecord.sale || saleForm)}>Download Receipt PDF</button>
               </div>
             )}
           </section>

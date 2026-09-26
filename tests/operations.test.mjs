@@ -128,3 +128,29 @@ test("workflowSummary respects sold status", () => {
   });
   assert.equal(result.stage, "Sold");
 });
+
+
+test("monthlyAccounting includes selling fees, shipping and VAT in all-in cost", () => {
+  const result = monthlyAccounting(
+    [
+      {
+        sold_at: "2026-09-21T12:00:00Z",
+        selling_price: 6000,
+        purchase_price: 4000,
+        repair_cost: 200,
+        other_cost: 100,
+        platform_fee: 200,
+        shipping_cost: 100,
+        vat_cost: 280,
+        realized_profit: 1120,
+      },
+    ],
+    2026,
+    8,
+  );
+  assert.equal(result.platformFees, 200);
+  assert.equal(result.shippingCost, 100);
+  assert.equal(result.vatCost, 280);
+  assert.equal(result.totalCost, 4880);
+  assert.equal(result.profit, 1120);
+});

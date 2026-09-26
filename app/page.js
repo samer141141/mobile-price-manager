@@ -18,6 +18,7 @@ import {
 import {
   businessInsights,
   historyFor,
+  inventoryAgeMeta,
   marketRecommendations,
   smartBuyAnalysis,
 } from "../lib/business-intelligence.mjs";
@@ -1345,6 +1346,16 @@ export default function Home() {
                     value={money(available.reduce((n,p)=>n+cost(p),0))}
                     detail="Money currently tied up in available inventory"
                   />
+                  <Card
+                    title="Avg. Time to Sell"
+                    value={insights.avgDaysToSell == null ? "—" : Math.round(insights.avgDaysToSell) + " days"}
+                    detail="Average purchase-to-sale time"
+                  />
+                  <Card
+                    title="Slow Stock"
+                    value={insights.slowCount}
+                    detail="30+ days: review price or relist"
+                  />
                 </>
               ) : (
                 <Card
@@ -2192,6 +2203,7 @@ export default function Home() {
                 onReplacePriceHistory={persistPriceHistory}
                 setNotice={setNotice}
                 setError={setError}
+                onRefresh={load}
               />
             )}
             {tab === "team" && access.role === "admin" && (
@@ -2610,16 +2622,26 @@ export default function Home() {
       {details && (() => {
         const timeline = buildPhoneTimeline(details, saleHistory, adRecords);
         const statusIndex = controlStatusIndex(details.status);
-        const totalCost = cost(details);
+        const baseCost = cost(details);
         const expectedProfit = profit(details);
-        const margin =
-          Number(details.selling_price || 0) > 0
-            ? Math.round((expectedProfit / Number(details.selling_price || 0)) * 100)
-            : 0;
         const matchingSales = saleHistory.filter(
           (sale) => String(sale.phone_id ?? sale.phoneId ?? "") === String(details.id),
         );
         const latestSale = matchingSales.find((sale) => !sale.returned_at) || matchingSales[0];
+        const saleExtras = latestSale
+          ? Number(latestSale.platform_fee || 0) +
+            Number(latestSale.shipping_cost || 0) +
+            Number(latestSale.vat_cost || 0)
+          : 0;
+        const totalCost = baseCost + saleExtras;
+        const displayProfit = latestSale && !latestSale.returned_at
+          ? Number(latestSale.realized_profit || 0)
+          : expectedProfit;
+        const margin =
+          Number(details.selling_price || 0) > 0
+            ? Math.round((displayProfit / Number(details.selling_price || 0)) * 100)
+            : 0;
+        const age = inventoryAgeMeta(details);
         const photos = controlPhotos || [];
 
         return (
@@ -2688,6 +2710,10 @@ export default function Home() {
                     <div>
                       <span>Condition</span>
                       <strong>{details.condition || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Days in stock</span>
+                      <strong>{age.days == null ? "—" : age.days + " days"}</strong>
                     </div>
                   </div>
 
@@ -2835,8 +2861,8 @@ export default function Home() {
                         <span>PROFIT</span>
                         <h3>Financial overview</h3>
                       </div>
-                      <strong className={expectedProfit >= 0 ? "positive" : "negative"}>
-                        {money(expectedProfit)}
+                      <strong className={displayProfit >= 0 ? "positive" : "negative"}>
+                        {money(displayProfit)}
                       </strong>
                     </div>
                     <div className="control-kpi-grid">
@@ -2849,8 +2875,8 @@ export default function Home() {
                         <strong>{money(details.selling_price)}</strong>
                       </div>
                       <div>
-                        <span>Expected profit</span>
-                        <strong>{money(expectedProfit)}</strong>
+                        <span>{latestSale && !latestSale.returned_at ? "Real net profit" : "Expected profit"}</span>
+                        <strong>{money(displayProfit)}</strong>
                       </div>
                       <div>
                         <span>Margin</span>
@@ -2861,6 +2887,13 @@ export default function Home() {
                       <div><span>Purchase</span><strong>{money(details.purchase_price)}</strong></div>
                       <div><span>Repair</span><strong>{money(details.repair_cost)}</strong></div>
                       <div><span>Other</span><strong>{money(details.other_cost)}</strong></div>
+                      {latestSale && !latestSale.returned_at && (
+                        <>
+                          <div><span>Platform fee</span><strong>{money(latestSale.platform_fee)}</strong></div>
+                          <div><span>Shipping</span><strong>{money(latestSale.shipping_cost)}</strong></div>
+                          <div><span>VAT / VMB</span><strong>{money(latestSale.vat_cost)}</strong></div>
+                        </>
+                      )}
                     </div>
                     {latestSale && (
                       <p className="control-sale-note">
