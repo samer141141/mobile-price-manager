@@ -3878,3 +3878,25 @@ footer {
 .provider-security-note {
   justify-content: flex-start;
 }
+
+
+.free-imei-actions {
+  margin-top: 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.free-imei-actions button {
+  min-height: 40px;
+}
+
+.imei-free-note {
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(15, 104, 65, 0.055);
+  border: 1px solid rgba(15, 104, 65, 0.12);
+  color: var(--muted, #61746f);
+  font-size: 13px;
+  line-height: 1.5;
+}
