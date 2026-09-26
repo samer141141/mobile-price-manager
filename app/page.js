@@ -735,7 +735,7 @@ export default function Home() {
               form: {
                 ...current.form,
                 model: current.form.model || result.device_name || current.form.model,
-                storage_gb: current.form.storage_gb || result.storage_gb || 128,
+                storage_gb: result.storage_gb || current.form.storage_gb || 128,
               },
             }
           : current,
@@ -1256,7 +1256,48 @@ export default function Home() {
                       {purchaseImeiLoading ? "Checking IMEI…" : "Check IMEI Before Purchase"}
                     </button>
                   </div>
-                  {purchaseImeiResult && <ImeiCheckPanel result={purchaseImeiResult} />}
+                  {purchaseImeiResult && (
+                    <>
+                      <ImeiCheckPanel result={purchaseImeiResult} />
+                      <div className="actions imei-purchase-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() =>
+                            setEditor({
+                              id: null,
+                              imeiCheckResult: purchaseImeiResult,
+                              imeiCheckedFor: purchaseImeiResult.imei,
+                              imeiCheckLoading: false,
+                              imeiCheckDirty: true,
+                              form: {
+                                ...blank,
+                                model:
+                                  purchaseImeiResult.device_name ||
+                                  purchaseImeiResult.model_description ||
+                                  marketForm.model ||
+                                  "",
+                                storage_gb:
+                                  purchaseImeiResult.storage_gb ||
+                                  marketForm.storage_gb ||
+                                  128,
+                                imei: purchaseImeiResult.imei,
+                                purchase_price: Number(dealPrice || 0),
+                                battery_health: Number(dealBattery || 0) || "",
+                                condition: marketForm.condition || "Good",
+                                inventory_scope: "business",
+                              },
+                            })
+                          }
+                        >
+                          Buy / Add to Lager
+                        </button>
+                        <span>
+                          Purchase price {dealPrice ? money(dealPrice) : "not entered"} · IMEI result will be saved with the phone.
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="calculator market-live">
                   <div className="calculator-heading"><span className="market-dot" /><div><span className="section-kicker">Live intelligence</span><h3>Live market check</h3></div></div>
