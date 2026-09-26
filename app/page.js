@@ -130,7 +130,12 @@ async function requestImeiCheck(imei) {
     cache: "no-store",
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error || "IMEI check failed.");
+  if (!response.ok) {
+    const error = new Error(body?.error || "IMEI check failed.");
+    error.code = body?.code || "";
+    error.setupUrl = body?.setup_url || "";
+    throw error;
+  }
   return body;
 }
 
@@ -188,6 +193,7 @@ function phoneEditorState(phone) {
     imeiCheckedFor: phone.imei || "",
     imeiCheckLoading: false,
     imeiCheckDirty: false,
+    imeiCheckError: "",
     form: {
       ...Object.fromEntries(
         Object.keys(blank).map((key) => [key, phone[key] ?? ""]),
@@ -311,6 +317,7 @@ export default function Home() {
     [purchaseImei, setPurchaseImei] = useState(""),
     [purchaseImeiResult, setPurchaseImeiResult] = useState(null),
     [purchaseImeiLoading, setPurchaseImeiLoading] = useState(false),
+    [purchaseImeiError, setPurchaseImeiError] = useState(null),
     [imeiCheckingId, setImeiCheckingId] = useState(null),
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
@@ -698,6 +705,7 @@ export default function Home() {
   }
   async function runPurchaseImeiCheck() {
     setPurchaseImeiLoading(true);
+    setPurchaseImeiError(null);
     setError("");
     setNotice("");
     try {
@@ -712,7 +720,11 @@ export default function Home() {
       setNotice("IMEI check completed. Model/storage were filled when available.");
     } catch (e) {
       setPurchaseImeiResult(null);
-      setError(e.message);
+      setPurchaseImeiError({
+        message: e.message,
+        code: e.code || "",
+        setupUrl: e.setupUrl || "",
+      });
     } finally {
       setPurchaseImeiLoading(false);
     }
@@ -720,7 +732,9 @@ export default function Home() {
 
   async function runEditorImeiCheck() {
     if (!editor) return;
-    setEditor((current) => current ? { ...current, imeiCheckLoading: true } : current);
+    setEditor((current) =>
+      current ? { ...current, imeiCheckLoading: true, imeiCheckError: "" } : current,
+    );
     setError("");
     try {
       const result = await requestImeiCheck(editor.form.imei);
@@ -732,6 +746,7 @@ export default function Home() {
               imeiCheckResult: result,
               imeiCheckedFor: result.imei,
               imeiCheckDirty: true,
+              imeiCheckError: "",
               form: {
                 ...current.form,
                 model: current.form.model || result.device_name || current.form.model,
@@ -742,8 +757,15 @@ export default function Home() {
       );
       setNotice("IMEI check completed.");
     } catch (e) {
-      setEditor((current) => current ? { ...current, imeiCheckLoading: false } : current);
-      setError(e.message);
+      setEditor((current) =>
+        current
+          ? {
+              ...current,
+              imeiCheckLoading: false,
+              imeiCheckError: e.message,
+            }
+          : current,
+      );
     }
   }
 
@@ -976,6 +998,7 @@ export default function Home() {
                           imeiCheckedFor: "",
                           imeiCheckLoading: false,
                           imeiCheckDirty: false,
+                          imeiCheckError: "",
                           form: {
                             ...blank,
                             inventory_scope:
@@ -1237,6 +1260,7 @@ export default function Home() {
                       onChange={(v) => {
                         setPurchaseImei(String(v || "").replace(/\D/g, "").slice(0, 15));
                         setPurchaseImeiResult(null);
+                        setPurchaseImeiError(null);
                       }}
                     />
                     <Field
@@ -1250,12 +1274,32 @@ export default function Home() {
                     <button
                       type="button"
                       className="primary"
-                      disabled={purchaseImeiLoading || !/^\d{15}$/.test(purchaseImei)}
+                      disabled={purchaseImeiLoading}
                       onClick={runPurchaseImeiCheck}
                     >
                       {purchaseImeiLoading ? "Checking IMEI…" : "Check IMEI Before Purchase"}
                     </button>
                   </div>
+                  {purchaseImeiError && (
+                    <div className="imei-inline-error" role="alert">
+                      <strong>IMEI check could not run.</strong>
+                      <span>{purchaseImeiError.message}</span>
+                      {purchaseImeiError.code === "IMEI_API_NOT_CONFIGURED" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.open(
+                              purchaseImeiError.setupUrl || "https://imeicheck.net/promo-api",
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          }
+                        >
+                          Open IMEI provider setup
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {purchaseImeiResult && (
                     <>
                       <ImeiCheckPanel result={purchaseImeiResult} />
@@ -1270,6 +1314,7 @@ export default function Home() {
                               imeiCheckedFor: purchaseImeiResult.imei,
                               imeiCheckLoading: false,
                               imeiCheckDirty: true,
+                              imeiCheckError: "",
                               form: {
                                 ...blank,
                                 model:
@@ -1921,6 +1966,7 @@ export default function Home() {
                               imeiCheckResult: null,
                               imeiCheckedFor: "",
                               imeiCheckDirty: false,
+                              imeiCheckError: "",
                             }
                           : {}),
                       })
@@ -1933,13 +1979,19 @@ export default function Home() {
                 <button
                   type="button"
                   className="primary"
-                  disabled={editor.imeiCheckLoading || !/^\d{15}$/.test(String(editor.form.imei || ""))}
+                  disabled={editor.imeiCheckLoading}
                   onClick={runEditorImeiCheck}
                 >
                   {editor.imeiCheckLoading ? "Checking IMEI…" : "IMEI Check"}
                 </button>
                 <span>Blacklist · SIM lock · Find My/iCloud · carrier · warranty</span>
               </div>
+              {editor.imeiCheckError && (
+                <div className="imei-inline-error" role="alert">
+                  <strong>IMEI check could not run.</strong>
+                  <span>{editor.imeiCheckError}</span>
+                </div>
+              )}
               {editor.imeiCheckResult && editor.imeiCheckedFor === editor.form.imei && (
                 <ImeiCheckPanel result={editor.imeiCheckResult} compact />
               )}
