@@ -1,5 +1,3 @@
-import { APPLE_TAC_MODELS } from "../../../../lib/apple-tac-models";
-
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
@@ -10,7 +8,7 @@ function cleanImei(value) {
 function validLuhn(imei) {
   if (!/^\d{15}$/.test(imei)) return false;
   let sum = 0;
-  for (let i = 0; i < 15; i += 1) {
+  for (let i = 0; i < imei.length; i += 1) {
     let digit = Number(imei[i]);
     if (i % 2 === 1) {
       digit *= 2;
@@ -25,6 +23,7 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const imei = cleanImei(body?.imei);
+
     if (!/^\d{15}$/.test(imei)) {
       return Response.json(
         { error: "IMEI must contain exactly 15 digits." },
@@ -33,17 +32,16 @@ export async function POST(request) {
     }
 
     const tac = imei.slice(0, 8);
-    const model = APPLE_TAC_MODELS[tac] || null;
 
     return Response.json(
       {
         imei,
         tac,
-        provider: "Free local TAC database",
+        provider: "Free IMEI validation",
         mode: "free",
         luhn_valid: validLuhn(imei),
-        device_name: model,
-        model_description: model,
+        device_name: null,
+        model_description: null,
         storage_gb: null,
         blacklist: "Free manual check",
         sim_lock: "Check on device/carrier",
@@ -59,13 +57,13 @@ export async function POST(request) {
         checked_at: new Date().toISOString(),
         swappa_url: "https://swappa.com/imei",
         apple_activation_lock_url: "https://support.apple.com/en-us/108794",
-        device_lookup_url:
-          "https://devicedecoded.com/tools/check-imei?imei=" +
-          encodeURIComponent(imei),
         note:
-          "Device identification is local and free. Blacklist and Activation Lock must be confirmed using the free external checks before purchase.",
+          "This free endpoint validates IMEI/TAC only. The Lager UI performs local Apple TAC model lookup in the browser.",
       },
-      { headers: { "Cache-Control": "no-store" } },
+      {
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   } catch (error) {
     return Response.json(
