@@ -120,23 +120,62 @@ const AD_PLATFORM_URLS = {
 };
 
 
+function validImeiLuhn(imei) {
+  if (!/^\d{15}$/.test(imei)) return false;
+  let sum = 0;
+  for (let i = 0; i < imei.length; i += 1) {
+    let digit = Number(imei[i]);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
 async function requestImeiCheck(imei) {
   const cleaned = String(imei || "").replace(/\D/g, "");
   if (!/^\d{15}$/.test(cleaned)) {
     throw new Error("IMEI must contain exactly 15 digits.");
   }
 
-  const response = await fetch("/api/imei/free", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ imei: cleaned }),
-    cache: "no-store",
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body?.error || "Free IMEI check failed.");
+  const tac = cleaned.slice(0, 8);
+  let model = null;
+
+  try {
+    const { APPLE_TAC_MODELS } = await import("../lib/apple-tac-models");
+    model = APPLE_TAC_MODELS?.[tac] || null;
+  } catch {
+    model = null;
   }
-  return body;
+
+  return {
+    imei: cleaned,
+    tac,
+    provider: "Free local TAC database",
+    mode: "free",
+    luhn_valid: validImeiLuhn(cleaned),
+    device_name: model,
+    model_description: model,
+    storage_gb: null,
+    blacklist: "Free manual check",
+    sim_lock: "Check on device/carrier",
+    fmi: "Check before purchase",
+    icloud: "Check before purchase",
+    carrier: "Unknown",
+    country: "Unknown",
+    warranty: "Unknown",
+    activation: "Manual verification required",
+    refurbished: null,
+    demo_unit: null,
+    lost_mode: null,
+    checked_at: new Date().toISOString(),
+    swappa_url: "https://swappa.com/imei",
+    apple_activation_lock_url: "https://support.apple.com/en-us/108794",
+    note:
+      "Device identification is local and free. Blacklist and Activation Lock must be confirmed using the free external checks before purchase.",
+  };
 }
 
 function imeiTone(value) {
@@ -168,11 +207,15 @@ function ImeiCheckPanel({ result, compact = false }) {
         ["Warranty", result.warranty || "Unknown", "neutral"],
       ];
 
-  async function openSwappa() {
-    try {
-      await navigator.clipboard.writeText(result.imei || "");
-    } catch {}
-    window.open(result.swappa_url || "https://swappa.com/imei", "_blank", "noopener,noreferrer");
+  function openSwappa() {
+    window.open(
+      result.swappa_url || "https://swappa.com/imei",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(result.imei || "").catch(() => {});
+    }
   }
 
   return (
