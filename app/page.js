@@ -122,27 +122,21 @@ const AD_PLATFORM_URLS = {
 
 async function requestImeiCheck(imei) {
   const cleaned = String(imei || "").replace(/\D/g, "");
-  if (!/^\d{15}$/.test(cleaned)) throw new Error("IMEI must contain exactly 15 digits.");
-  if (!supabase) throw new Error("Supabase is not connected.");
-
-  const { data, error } = await supabase.functions.invoke("imei-check", {
-    body: { imei: cleaned },
-  });
-
-  if (error) {
-    let body = data || {};
-    try {
-      if (error.context && typeof error.context.json === "function") {
-        body = await error.context.json();
-      }
-    } catch {}
-    const failure = new Error(body?.error || error.message || "IMEI check failed.");
-    failure.code = body?.code || "";
-    failure.setupUrl = body?.setup_url || "";
-    throw failure;
+  if (!/^\d{15}$/.test(cleaned)) {
+    throw new Error("IMEI must contain exactly 15 digits.");
   }
 
-  return data;
+  const response = await fetch("/api/imei/free", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imei: cleaned }),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.error || "Free IMEI check failed.");
+  }
+  return body;
 }
 
 function imeiTone(value) {
@@ -154,21 +148,38 @@ function imeiTone(value) {
 
 function ImeiCheckPanel({ result, compact = false }) {
   if (!result) return null;
-  const rows = [
-    ["Device", result.device_name || result.model_description || "Unknown", "neutral"],
-    ["Blacklist", result.blacklist || "Unknown", imeiTone(result.blacklist)],
-    ["SIM Lock", result.sim_lock || "Unknown", imeiTone(result.sim_lock)],
-    ["Find My / Activation Lock", result.fmi || "Unknown", imeiTone(result.fmi)],
-    ["iCloud", result.icloud || "Unknown", imeiTone(result.icloud)],
-    ["Carrier", result.carrier || "Unknown", "neutral"],
-    ["Country", result.country || "Unknown", "neutral"],
-    ["Warranty", result.warranty || "Unknown", "neutral"],
-  ];
+  const isFree = result.mode === "free";
+  const rows = isFree
+    ? [
+        ["Device", result.device_name || "Not found in local Apple TAC database", "neutral"],
+        ["TAC", result.tac || "Unknown", "neutral"],
+        ["IMEI checksum", result.luhn_valid ? "Valid" : "Invalid — recheck the IMEI", result.luhn_valid ? "good" : "bad"],
+        ["Blacklist", "Use free Swappa check", "neutral"],
+        ["Activation Lock", "Verify before purchase", "neutral"],
+      ]
+    : [
+        ["Device", result.device_name || result.model_description || "Unknown", "neutral"],
+        ["Blacklist", result.blacklist || "Unknown", imeiTone(result.blacklist)],
+        ["SIM Lock", result.sim_lock || "Unknown", imeiTone(result.sim_lock)],
+        ["Find My / Activation Lock", result.fmi || "Unknown", imeiTone(result.fmi)],
+        ["iCloud", result.icloud || "Unknown", imeiTone(result.icloud)],
+        ["Carrier", result.carrier || "Unknown", "neutral"],
+        ["Country", result.country || "Unknown", "neutral"],
+        ["Warranty", result.warranty || "Unknown", "neutral"],
+      ];
+
+  async function openSwappa() {
+    try {
+      await navigator.clipboard.writeText(result.imei || "");
+    } catch {}
+    window.open(result.swappa_url || "https://swappa.com/imei", "_blank", "noopener,noreferrer");
+  }
+
   return (
     <div className={"imei-check-card" + (compact ? " compact" : "")}>
       <div className="imei-check-heading">
         <div>
-          <span className="section-kicker">IMEI CHECK</span>
+          <span className="section-kicker">{isFree ? "FREE IMEI CHECK" : "IMEI CHECK"}</span>
           <strong>{result.imei}</strong>
         </div>
         <small>{result.checked_at ? new Date(result.checked_at).toLocaleString("sv-SE") : ""}</small>
@@ -181,6 +192,43 @@ function ImeiCheckPanel({ result, compact = false }) {
           </div>
         ))}
       </div>
+      {isFree && (
+        <>
+          <div className="actions free-imei-actions">
+            <button type="button" className="primary" onClick={openSwappa}>
+              Copy IMEI + Open Free Blacklist Check
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                window.open(
+                  result.device_lookup_url || "https://devicedecoded.com/tools/check-imei",
+                  "_blank",
+                  "noopener,noreferrer",
+                )
+              }
+            >
+              Open Free Device Lookup
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                window.open(
+                  result.apple_activation_lock_url || "https://support.apple.com/en-us/108794",
+                  "_blank",
+                  "noopener,noreferrer",
+                )
+              }
+            >
+              Activation Lock Guide
+            </button>
+          </div>
+          <p className="imei-free-note">
+            Model lookup is local and free. For blacklist status, the IMEI is copied so you can paste it into Swappa's free checker.
+            Always verify that the iPhone is not “Locked to Owner” before buying.
+          </p>
+        </>
+      )}
       <div className="imei-check-meta">
         <span>{result.provider || "IMEI provider"}</span>
         {result.refurbished === true && <span>Refurbished</span>}
@@ -325,12 +373,6 @@ export default function Home() {
     [purchaseImeiLoading, setPurchaseImeiLoading] = useState(false),
     [purchaseImeiError, setPurchaseImeiError] = useState(null),
     [imeiCheckingId, setImeiCheckingId] = useState(null),
-    [imeiProvider, setImeiProvider] = useState({
-      token: "",
-      serviceId: 1,
-      status: null,
-      loading: false,
-    }),
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
     [adBuilder, setAdBuilder] = useState(null),
@@ -805,44 +847,6 @@ export default function Home() {
     }
   }
 
-  async function loadImeiProviderStatus() {
-    setImeiProvider((current) => ({ ...current, loading: true }));
-    try {
-      const status = await rpc("lager_imei_provider_status");
-      setImeiProvider((current) => ({
-        ...current,
-        loading: false,
-        status,
-        serviceId: Number(status?.serviceId || current.serviceId || 1),
-      }));
-    } catch (e) {
-      setImeiProvider((current) => ({ ...current, loading: false }));
-      setError(e.message);
-    }
-  }
-
-  async function saveImeiProvider(e) {
-    e.preventDefault();
-    setError("");
-    setNotice("");
-    setImeiProvider((current) => ({ ...current, loading: true }));
-    try {
-      const status = await rpc("lager_set_imei_provider", {
-        provider_token: imeiProvider.token,
-        provider_service_id: Number(imeiProvider.serviceId || 1),
-      });
-      setImeiProvider((current) => ({
-        ...current,
-        token: "",
-        loading: false,
-        status,
-      }));
-      setNotice("IMEI provider connected securely. IMEI Check is ready.");
-    } catch (e) {
-      setImeiProvider((current) => ({ ...current, loading: false }));
-      setError(e.message);
-    }
-  }
 
   async function exportPhones() {
     setBusy(true);
@@ -974,10 +978,7 @@ export default function Home() {
                 ...(financial ? [["insights", "Insights", "Insights"]] : []),
                 ["ads", "Ad Center", "Ads"],
                 ...(access.role === "admin"
-                  ? [
-                      ["team", "Team Permissions", "Team"],
-                      ["settings", "Settings", "Settings"],
-                    ]
+                  ? [["team", "Team Permissions", "Team"]]
                   : []),
               ].map(([key, label, mobileLabel]) => (
                 <button
@@ -991,7 +992,6 @@ export default function Home() {
                       rpc("lager_members")
                         .then(setMembers)
                         .catch((e) => setError(e.message));
-                    if (key === "settings") loadImeiProviderStatus();
                   }}
                 >
                   <span className="nav-label-full">{label}</span>
@@ -1332,27 +1332,13 @@ export default function Home() {
                       disabled={purchaseImeiLoading}
                       onClick={runPurchaseImeiCheck}
                     >
-                      {purchaseImeiLoading ? "Checking IMEI…" : "Check IMEI Before Purchase"}
+                      {purchaseImeiLoading ? "Checking IMEI… FREE" : "Free IMEI Check Before Purchase"}
                     </button>
                   </div>
                   {purchaseImeiError && (
                     <div className="imei-inline-error" role="alert">
                       <strong>IMEI check could not run.</strong>
                       <span>{purchaseImeiError.message}</span>
-                      {purchaseImeiError.code === "IMEI_API_NOT_CONFIGURED" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            window.open(
-                              purchaseImeiError.setupUrl || "https://imeicheck.net/promo-api",
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                        >
-                          Open IMEI provider setup
-                        </button>
-                      )}
                     </div>
                   )}
                   {purchaseImeiResult && (
@@ -1818,94 +1804,6 @@ export default function Home() {
                 setError={setError}
               />
             )}
-            {tab === "settings" && access.role === "admin" && (
-              <section className="panel imei-provider-settings">
-                <div className="title">
-                  <div>
-                    <span className="section-kicker">SECURE INTEGRATION</span>
-                    <h2>IMEI Provider Settings</h2>
-                    <p>
-                      Connect IMEIcheck.net once. The API token is encrypted in Supabase Vault and is never stored in the browser.
-                    </p>
-                  </div>
-                  <span className={
-                    "provider-status " +
-                    (imeiProvider.status?.configured ? "connected" : "disconnected")
-                  }>
-                    {imeiProvider.status?.configured ? "Connected" : "Not connected"}
-                  </span>
-                </div>
-
-                <div className="provider-info-card">
-                  <div>
-                    <strong>IMEIcheck.net</strong>
-                    <span>
-                      Apple model · SIM lock · Find My · Lost Mode · block status · warranty
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      window.open(
-                        "https://imeicheck.net/promo-api",
-                        "_blank",
-                        "noopener,noreferrer",
-                      )
-                    }
-                  >
-                    Get API Token
-                  </button>
-                </div>
-
-                <form className="grid provider-settings-form" onSubmit={saveImeiProvider}>
-                  <label>
-                    <span>API Token</span>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      placeholder={imeiProvider.status?.configured ? "Enter a new token only to replace it" : "Paste IMEIcheck.net API token"}
-                      value={imeiProvider.token}
-                      onChange={(e) =>
-                        setImeiProvider({ ...imeiProvider, token: e.target.value })
-                      }
-                      required
-                    />
-                  </label>
-                  <Field
-                    label="Service ID"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={imeiProvider.serviceId}
-                    onChange={(v) =>
-                      setImeiProvider({ ...imeiProvider, serviceId: v })
-                    }
-                  />
-                  <div className="actions provider-save-actions">
-                    <button
-                      type="button"
-                      disabled={imeiProvider.loading}
-                      onClick={loadImeiProviderStatus}
-                    >
-                      Refresh Status
-                    </button>
-                    <button
-                      className="primary"
-                      disabled={imeiProvider.loading || !imeiProvider.token.trim()}
-                    >
-                      {imeiProvider.loading ? "Saving…" : "Save Secure Connection"}
-                    </button>
-                  </div>
-                </form>
-
-                <div className="provider-security-note">
-                  <strong>Secure storage</strong>
-                  <span>
-                    Token is stored encrypted in Supabase Vault. Lager only receives the IMEI result, never the token.
-                  </span>
-                </div>
-              </section>
-            )}
             {tab === "team" && access.role === "admin" && (
               <section className="panel">
                 <h2>Team Permissions</h2>
@@ -2125,9 +2023,9 @@ export default function Home() {
                   disabled={editor.imeiCheckLoading}
                   onClick={runEditorImeiCheck}
                 >
-                  {editor.imeiCheckLoading ? "Checking IMEI…" : "IMEI Check"}
+                  {editor.imeiCheckLoading ? "Checking IMEI… FREE" : "Free IMEI Check"}
                 </button>
-                <span>Blacklist · SIM lock · Find My/iCloud · carrier · warranty</span>
+                <span>Free model lookup · free blacklist link · Activation Lock check</span>
               </div>
               {editor.imeiCheckError && (
                 <div className="imei-inline-error" role="alert">
@@ -2434,7 +2332,7 @@ export default function Home() {
                       onClick={() => checkStoredPhoneImei(details)}
                       disabled={!details.imei || imeiCheckingId === String(details.id)}
                     >
-                      {imeiCheckingId === String(details.id) ? "Checking IMEI…" : "IMEI Check"}
+                      {imeiCheckingId === String(details.id) ? "Checking IMEI… FREE" : "Free IMEI Check"}
                     </button>
                     <button
                       onClick={async () => {
