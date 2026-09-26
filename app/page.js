@@ -120,10 +120,74 @@ const AD_PLATFORM_URLS = {
 };
 
 
+async function requestImeiCheck(imei) {
+  const cleaned = String(imei || "").replace(/\D/g, "");
+  if (!/^\d{15}$/.test(cleaned)) throw new Error("IMEI must contain exactly 15 digits.");
+  const response = await fetch("/api/imei/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imei: cleaned }),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body?.error || "IMEI check failed.");
+  return body;
+}
+
+function imeiTone(value) {
+  const v = String(value || "").toLowerCase();
+  if (["clean", "unlocked", "off"].some((word) => v === word || v.includes(word))) return "good";
+  if (["blacklist", "blacklisted", "locked", "on", "stolen", "lost"].some((word) => v === word || v.includes(word))) return "bad";
+  return "neutral";
+}
+
+function ImeiCheckPanel({ result, compact = false }) {
+  if (!result) return null;
+  const rows = [
+    ["Device", result.device_name || result.model_description || "Unknown", "neutral"],
+    ["Blacklist", result.blacklist || "Unknown", imeiTone(result.blacklist)],
+    ["SIM Lock", result.sim_lock || "Unknown", imeiTone(result.sim_lock)],
+    ["Find My / Activation Lock", result.fmi || "Unknown", imeiTone(result.fmi)],
+    ["iCloud", result.icloud || "Unknown", imeiTone(result.icloud)],
+    ["Carrier", result.carrier || "Unknown", "neutral"],
+    ["Country", result.country || "Unknown", "neutral"],
+    ["Warranty", result.warranty || "Unknown", "neutral"],
+  ];
+  return (
+    <div className={"imei-check-card" + (compact ? " compact" : "")}>
+      <div className="imei-check-heading">
+        <div>
+          <span className="section-kicker">IMEI CHECK</span>
+          <strong>{result.imei}</strong>
+        </div>
+        <small>{result.checked_at ? new Date(result.checked_at).toLocaleString("sv-SE") : ""}</small>
+      </div>
+      <div className="imei-check-grid">
+        {rows.map(([label, value, tone]) => (
+          <div className="imei-check-item" key={label}>
+            <span>{label}</span>
+            <strong className={"imei-status " + tone}>{String(value)}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="imei-check-meta">
+        <span>{result.provider || "IMEI provider"}</span>
+        {result.refurbished === true && <span>Refurbished</span>}
+        {result.demo_unit === true && <span>Demo unit</span>}
+        {result.lost_mode === true && <span className="danger-text">Lost Mode</span>}
+      </div>
+    </div>
+  );
+}
+
 function phoneEditorState(phone) {
   return {
     id: phone.id,
     original: phone,
+    imeiCheckResult: phone.imei_check || null,
+    imeiCheckedFor: phone.imei || "",
+    imeiCheckLoading: false,
+    imeiCheckDirty: false,
     form: {
       ...Object.fromEntries(
         Object.keys(blank).map((key) => [key, phone[key] ?? ""]),
@@ -244,6 +308,10 @@ export default function Home() {
     [expenses, setExpenses] = useState(0),
     [dealPrice, setDealPrice] = useState(""),
     [dealBattery, setDealBattery] = useState(85),
+    [purchaseImei, setPurchaseImei] = useState(""),
+    [purchaseImeiResult, setPurchaseImeiResult] = useState(null),
+    [purchaseImeiLoading, setPurchaseImeiLoading] = useState(false),
+    [imeiCheckingId, setImeiCheckingId] = useState(null),
     [liveMarket, setLiveMarket] = useState(null),
     [checkingMarket, setCheckingMarket] = useState(false),
     [adBuilder, setAdBuilder] = useState(null),
@@ -628,6 +696,81 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function runPurchaseImeiCheck() {
+    setPurchaseImeiLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await requestImeiCheck(purchaseImei);
+      setPurchaseImeiResult(result);
+      const guessedModel = result.device_name || result.model_description || "";
+      setMarketForm((current) => ({
+        ...current,
+        model: guessedModel || current.model,
+        storage_gb: result.storage_gb || current.storage_gb,
+      }));
+      setNotice("IMEI check completed. Model/storage were filled when available.");
+    } catch (e) {
+      setPurchaseImeiResult(null);
+      setError(e.message);
+    } finally {
+      setPurchaseImeiLoading(false);
+    }
+  }
+
+  async function runEditorImeiCheck() {
+    if (!editor) return;
+    setEditor((current) => current ? { ...current, imeiCheckLoading: true } : current);
+    setError("");
+    try {
+      const result = await requestImeiCheck(editor.form.imei);
+      setEditor((current) =>
+        current
+          ? {
+              ...current,
+              imeiCheckLoading: false,
+              imeiCheckResult: result,
+              imeiCheckedFor: result.imei,
+              imeiCheckDirty: true,
+              form: {
+                ...current.form,
+                model: current.form.model || result.device_name || current.form.model,
+                storage_gb: current.form.storage_gb || result.storage_gb || 128,
+              },
+            }
+          : current,
+      );
+      setNotice("IMEI check completed.");
+    } catch (e) {
+      setEditor((current) => current ? { ...current, imeiCheckLoading: false } : current);
+      setError(e.message);
+    }
+  }
+
+  async function checkStoredPhoneImei(phone) {
+    if (!phone?.imei) return;
+    setImeiCheckingId(String(phone.id));
+    setError("");
+    try {
+      const result = await requestImeiCheck(phone.imei);
+      await rpc("lager_record_imei_check", {
+        device_imei: result.imei,
+        check_result: result,
+      });
+      setDetails((current) =>
+        current && String(current.id) === String(phone.id)
+          ? { ...current, imei_check: result, imei_checked_at: result.checked_at }
+          : current,
+      );
+      setNotice("IMEI check saved to this phone.");
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setImeiCheckingId(null);
+    }
+  }
+
   async function exportPhones() {
     setBusy(true);
     setError("");
@@ -829,6 +972,10 @@ export default function Home() {
                       onClick={() =>
                         setEditor({
                           id: null,
+                          imeiCheckResult: null,
+                          imeiCheckedFor: "",
+                          imeiCheckLoading: false,
+                          imeiCheckDirty: false,
                           form: {
                             ...blank,
                             inventory_scope:
@@ -1071,6 +1218,46 @@ export default function Home() {
                   <strong>Multi-source purchase-price comparison.</strong>{" "}
                   Use live sources when available and compare direct Swedish trade-in quotes from Apple and Elgiganten. Trade-in values are kept separate from resale listings.
                 </p>
+                <div className="calculator imei-purchase-check">
+                  <div className="calculator-heading">
+                    <span className="market-dot" />
+                    <div>
+                      <span className="section-kicker">Before purchase</span>
+                      <h3>IMEI & purchase check</h3>
+                    </div>
+                  </div>
+                  <p>Check the device before you buy it, then use the same asking price in Smart Buy.</p>
+                  <div className="grid">
+                    <Field
+                      label="IMEI"
+                      value={purchaseImei}
+                      placeholder="15 digit IMEI"
+                      inputMode="numeric"
+                      pattern="[0-9]{15}"
+                      onChange={(v) => {
+                        setPurchaseImei(String(v || "").replace(/\D/g, "").slice(0, 15));
+                        setPurchaseImeiResult(null);
+                      }}
+                    />
+                    <Field
+                      label="Seller asking price (SEK)"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={dealPrice}
+                      onChange={setDealPrice}
+                    />
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={purchaseImeiLoading || !/^\d{15}$/.test(purchaseImei)}
+                      onClick={runPurchaseImeiCheck}
+                    >
+                      {purchaseImeiLoading ? "Checking IMEI…" : "Check IMEI Before Purchase"}
+                    </button>
+                  </div>
+                  {purchaseImeiResult && <ImeiCheckPanel result={purchaseImeiResult} />}
+                </div>
                 <div className="calculator market-live">
                   <div className="calculator-heading"><span className="market-dot" /><div><span className="section-kicker">Live intelligence</span><h3>Live market check</h3></div></div>
                   <p>Tradera auction bids and starting prices are ignored. Fixed-price listings are used, and when an auction also has Buy Now, the Buy Now price is used.</p>
@@ -1602,6 +1789,16 @@ export default function Home() {
                       phone_id: editor.id == null ? null : String(editor.id),
                       payload: changes,
                     });
+                  if (
+                    editor.imeiCheckDirty &&
+                    editor.imeiCheckResult &&
+                    editor.imeiCheckedFor === editor.form.imei
+                  ) {
+                    await rpc("lager_record_imei_check", {
+                      device_imei: editor.form.imei,
+                      check_result: editor.imeiCheckResult,
+                    });
+                  }
                   setEditor(null);
                 },
                 editor.id ? "Phone updated." : "Phone added.",
@@ -1669,11 +1866,43 @@ export default function Home() {
                         : undefined
                     }
                     onChange={(v) =>
-                      setEditor({ ...editor, form: { ...editor.form, [k]: v } })
+                      setEditor({
+                        ...editor,
+                        form: {
+                          ...editor.form,
+                          [k]:
+                            k === "imei"
+                              ? String(v || "").replace(/\D/g, "").slice(0, 15)
+                              : v,
+                        },
+                        ...(k === "imei" && String(v || "") !== String(editor.imeiCheckedFor || "")
+                          ? {
+                              imeiCheckResult: null,
+                              imeiCheckedFor: "",
+                              imeiCheckDirty: false,
+                            }
+                          : {}),
+                      })
                     }
                   />
                 ),
               )}
+            <div className="wide imei-editor-check">
+              <div className="imei-editor-actions">
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={editor.imeiCheckLoading || !/^\d{15}$/.test(String(editor.form.imei || ""))}
+                  onClick={runEditorImeiCheck}
+                >
+                  {editor.imeiCheckLoading ? "Checking IMEI…" : "IMEI Check"}
+                </button>
+                <span>Blacklist · SIM lock · Find My/iCloud · carrier · warranty</span>
+              </div>
+              {editor.imeiCheckResult && editor.imeiCheckedFor === editor.form.imei && (
+                <ImeiCheckPanel result={editor.imeiCheckResult} compact />
+              )}
+            </div>
             <label className="wide">
               <span>Notes</span>
               <textarea
@@ -1965,6 +2194,13 @@ export default function Home() {
                       </button>
                     )}
                     <button
+                      className="imei-check-button"
+                      onClick={() => checkStoredPhoneImei(details)}
+                      disabled={!details.imei || imeiCheckingId === String(details.id)}
+                    >
+                      {imeiCheckingId === String(details.id) ? "Checking IMEI…" : "IMEI Check"}
+                    </button>
+                    <button
                       onClick={async () => {
                         if (details.imei) {
                           try {
@@ -2032,6 +2268,14 @@ export default function Home() {
                     <Detail label="Added" value={controlDate(details.created_at)} />
                     <Detail label="Last updated" value={controlDate(details.updated_at)} />
                   </dl>
+                  {details.imei_check ? (
+                    <ImeiCheckPanel result={details.imei_check} compact />
+                  ) : details.imei ? (
+                    <div className="imei-not-checked">
+                      <span>IMEI STATUS</span>
+                      <p>Not checked yet. Use IMEI Check above before purchase or resale.</p>
+                    </div>
+                  ) : null}
                   {details.notes && (
                     <div className="control-notes">
                       <span>NOTES</span>
