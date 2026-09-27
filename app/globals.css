@@ -4112,3 +4112,98 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* Visible professional command layer */
+.brand-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-title-line h1 { margin: 0; }
+.pro-release-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  background: #173e34;
+  color: white;
+  box-shadow: 0 7px 18px rgba(23, 62, 52, .16);
+}
+.pro-command-strip {
+  margin: 0 0 20px;
+  padding: 20px;
+  border: 1px solid rgba(23, 62, 52, .14);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(54, 125, 102, .12), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,.98), rgba(246,250,248,.96));
+  box-shadow: 0 16px 44px rgba(22, 45, 37, .08);
+}
+.pro-command-copy { max-width: 760px; }
+.pro-command-copy h3 {
+  margin: 4px 0 6px;
+  font-size: clamp(1.25rem, 2vw, 1.7rem);
+}
+.pro-command-copy p {
+  margin: 0;
+  color: var(--muted, #64748b);
+  line-height: 1.55;
+}
+.pro-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 14px;
+}
+.pro-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.pro-feature-grid > button {
+  min-height: 104px;
+  padding: 14px;
+  text-align: left;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  border-radius: 16px;
+  border: 1px solid rgba(23,62,52,.11);
+  background: rgba(255,255,255,.8);
+}
+.pro-feature-grid > button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(23,62,52,.28);
+  box-shadow: 0 10px 24px rgba(23,62,52,.08);
+}
+.pro-feature-grid > button > span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: #367d66;
+}
+.pro-feature-grid > button > strong {
+  font-size: .96rem;
+  color: #173e34;
+}
+.pro-feature-grid > button > small {
+  color: var(--muted, #64748b);
+  line-height: 1.35;
+}
+@media (max-width: 1050px) {
+  .pro-feature-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 700px) {
+  .pro-command-strip { padding: 16px; border-radius: 18px; }
+  .pro-feature-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 460px) {
+  .pro-feature-grid { grid-template-columns: 1fr; }
+}

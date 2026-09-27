@@ -1264,9 +1264,12 @@ export default function Home() {
         <div className="brand">
           <span className="brand-icon">LI</span>
           <div className="brand-copy">
-            <span className="brand-kicker">Inventory command center</span>
-            <h1>Lager iPhone</h1>
-            <p>Inventory · Market intelligence · Sales</p>
+            <span className="brand-kicker">Professional inventory command center</span>
+            <div className="brand-title-line">
+              <h1>Lager iPhone</h1>
+              <span className="pro-release-badge">PRO</span>
+            </div>
+            <p>Buy · QC · Repair · Price · Advertise · Sell · Profit</p>
           </div>
         </div>
         <div className="actions header-actions">
@@ -1313,6 +1316,50 @@ export default function Home() {
               </div>
               <span className="live-status"><i />Live data</span>
             </div>
+            <section className="pro-command-strip">
+              <div className="pro-command-copy">
+                <span className="section-kicker">PRO WORKFLOW</span>
+                <h3>One device. One complete workflow.</h3>
+                <p>
+                  Purchase intelligence, 24-point QC, repair + spare parts,
+                  market pricing, real profit and stock aging are now connected.
+                </p>
+              </div>
+              <div className="pro-command-actions">
+                <button className="primary" onClick={() => setTab("operations")}>
+                  Open Operations
+                </button>
+                <button onClick={() => setTab("market")}>Smart Buy & Market</button>
+                {financial && <button onClick={() => setTab("insights")}>Business Insights</button>}
+              </div>
+              <div className="pro-feature-grid">
+                <button type="button" onClick={() => setTab("operations")}>
+                  <span>01</span>
+                  <strong>Intake + QC</strong>
+                  <small>3uTools · IMEI · 24-point test</small>
+                </button>
+                <button type="button" onClick={() => setTab("operations")}>
+                  <span>02</span>
+                  <strong>Repair + Parts</strong>
+                  <small>Use stock parts and add cost automatically</small>
+                </button>
+                <button type="button" onClick={() => setTab("market")}>
+                  <span>03</span>
+                  <strong>Smart Buy</strong>
+                  <small>Market reference · max buy · expected margin</small>
+                </button>
+                <button type="button" onClick={() => setTab("operations")}>
+                  <span>04</span>
+                  <strong>Real Profit</strong>
+                  <small>Fees · shipping · VAT/VMB · net margin</small>
+                </button>
+                <button type="button" onClick={() => setTab("insights")} disabled={!financial}>
+                  <span>05</span>
+                  <strong>Stock Aging</strong>
+                  <small>Days in stock · slow-stock action</small>
+                </button>
+              </div>
+            </section>
             <section className="cards kpi-grid">
               <Card title="Available Phones" value={available.length} />
               <Card title="Sold Phones" value={sold.length} />
@@ -1368,7 +1415,7 @@ export default function Home() {
             <nav className="workspace-nav" aria-label="Dashboard sections">
               {[
                 ["available", "Available Phones", "Available"],
-                ["operations", "Operations", "Operations"],
+                ["operations", "Operations PRO", "Ops PRO"],
                 ["sold", "Sold Phones", "Sold"],
                 ["samer", "Samer", "Samer"],
                 ["parts", "Spare Parts", "Parts"],
