@@ -107,25 +107,52 @@ declare
     'Battery / charging behavior','Liquid damage / corrosion','Back glass / frame / screws'
   ];
 begin
-  if test_name is null or not test_name=any(allowed_tests) then raise exception 'Invalid device test'; end if;
-  if test_result not in ('Pass','Fail','N/A','Pending') then raise exception 'Invalid test result'; end if;
-  select id into pid from public.phones where id::text=phone_id;
+  if lager_set_qc.test_name is null or not lager_set_qc.test_name=any(allowed_tests) then
+    raise exception 'Invalid device test';
+  end if;
+  if lager_set_qc.test_result not in ('Pass','Fail','N/A','Pending') then
+    raise exception 'Invalid test result';
+  end if;
+
+  select p.id into pid
+  from public.phones p
+  where p.id::text=lager_set_qc.phone_id;
+
   if pid is null then raise exception 'Phone no longer exists'; end if;
 
   insert into public.lager_phone_qc(phone_id,tests,updated_at,updated_by)
-  values(pid,case when test_result='Pending' then '{}'::jsonb else jsonb_build_object(test_name,test_result) end,now(),auth.uid())
-  on conflict(phone_id) do update
-  set tests=case
-      when test_result='Pending' then coalesce(public.lager_phone_qc.tests,'{}'::jsonb)-test_name
-      else jsonb_set(coalesce(public.lager_phone_qc.tests,'{}'::jsonb),array[test_name],to_jsonb(test_result),true)
+  values(
+    pid,
+    case
+      when lager_set_qc.test_result='Pending' then '{}'::jsonb
+      else jsonb_build_object(lager_set_qc.test_name,lager_set_qc.test_result)
     end,
-    updated_at=now(),updated_by=auth.uid();
+    now(),
+    auth.uid()
+  )
+  on conflict on constraint lager_phone_qc_pkey do update
+  set tests=case
+      when lager_set_qc.test_result='Pending'
+        then coalesce(public.lager_phone_qc.tests,'{}'::jsonb)-lager_set_qc.test_name
+      else jsonb_set(
+        coalesce(public.lager_phone_qc.tests,'{}'::jsonb),
+        array[lager_set_qc.test_name],
+        to_jsonb(lager_set_qc.test_result),
+        true
+      )
+    end,
+    updated_at=now(),
+    updated_by=auth.uid();
 
   insert into public.lager_activity_log(actor_id,action,phone_id,phone_label,detail)
-  select auth.uid(),'Device test',p.id::text,
+  select
+    auth.uid(),
+    'Device test',
+    p.id::text,
     concat_ws(' ',p.model,case when p.storage_gb is not null then p.storage_gb||'GB' end),
-    test_name||': '||test_result
-  from public.phones p where p.id=pid;
+    lager_set_qc.test_name||': '||lager_set_qc.test_result
+  from public.phones p
+  where p.id=pid;
 end
 $function$;
 
