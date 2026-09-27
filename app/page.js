@@ -1316,50 +1316,6 @@ export default function Home() {
               </div>
               <span className="live-status"><i />Live data</span>
             </div>
-            <section className="pro-command-strip">
-              <div className="pro-command-copy">
-                <span className="section-kicker">PRO WORKFLOW</span>
-                <h3>One device. One complete workflow.</h3>
-                <p>
-                  Purchase intelligence, 24-point QC, repair + spare parts,
-                  market pricing, real profit and stock aging are now connected.
-                </p>
-              </div>
-              <div className="pro-command-actions">
-                <button className="primary" onClick={() => setTab("operations")}>
-                  Open Operations
-                </button>
-                <button onClick={() => setTab("market")}>Smart Buy & Market</button>
-                {financial && <button onClick={() => setTab("insights")}>Business Insights</button>}
-              </div>
-              <div className="pro-feature-grid">
-                <button type="button" onClick={() => setTab("operations")}>
-                  <span>01</span>
-                  <strong>Intake + QC</strong>
-                  <small>3uTools · IMEI · 24-point test</small>
-                </button>
-                <button type="button" onClick={() => setTab("operations")}>
-                  <span>02</span>
-                  <strong>Repair + Parts</strong>
-                  <small>Use stock parts and add cost automatically</small>
-                </button>
-                <button type="button" onClick={() => setTab("market")}>
-                  <span>03</span>
-                  <strong>Smart Buy</strong>
-                  <small>Market reference · max buy · expected margin</small>
-                </button>
-                <button type="button" onClick={() => setTab("operations")}>
-                  <span>04</span>
-                  <strong>Real Profit</strong>
-                  <small>Fees · shipping · VAT/VMB · net margin</small>
-                </button>
-                <button type="button" onClick={() => setTab("insights")} disabled={!financial}>
-                  <span>05</span>
-                  <strong>Stock Aging</strong>
-                  <small>Days in stock · slow-stock action</small>
-                </button>
-              </div>
-            </section>
             <section className="cards kpi-grid">
               <Card title="Available Phones" value={available.length} />
               <Card title="Sold Phones" value={sold.length} />
@@ -2805,13 +2761,6 @@ export default function Home() {
                       </button>
                     )}
                     <button
-                      className="imei-check-button"
-                      onClick={() => checkStoredPhoneImei(details)}
-                      disabled={!details.imei || imeiCheckingId === String(details.id)}
-                    >
-                      {imeiCheckingId === String(details.id) ? "Checking IMEI… FREE" : "Free IMEI Check"}
-                    </button>
-                    <button
                       onClick={async () => {
                         if (details.imei) {
                           try {
@@ -2879,20 +2828,6 @@ export default function Home() {
                     <Detail label="Added" value={controlDate(details.created_at)} />
                     <Detail label="Last updated" value={controlDate(details.updated_at)} />
                   </dl>
-                  {details.imei_check ? (
-                    <ImeiCheckPanel
-                      result={details.imei_check}
-                      compact
-                      onResultChange={(next) =>
-                        saveStoredImeiVerification(details, next)
-                      }
-                    />
-                  ) : details.imei ? (
-                    <div className="imei-not-checked">
-                      <span>IMEI STATUS</span>
-                      <p>Not checked yet. Use IMEI Check above before purchase or resale.</p>
-                    </div>
-                  ) : null}
                   {details.notes && (
                     <div className="control-notes">
                       <span>NOTES</span>
